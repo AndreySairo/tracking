@@ -1,0 +1,21 @@
+# 1. Установить Git и настроить имя/email (один раз)
+git config --global user.name "AndreySairo"
+git config --global user.email "160240120@mail.ru"
+
+# 2. Скачать проект (создастся папка tracking)
+cd /d/projects          # или любая папка, куда хочешь
+git clone https://github.com/AndreySairo/tracking.git
+
+# 3. Работать: менять файлы, потом
+git add .
+git commit -m "что изменил"
+git push                # отправить на GitHub
+При первом git push/clone приватного репо — авторизация через браузер (как здесь).
+
+
+
+  Что делается КАЖДЫЙ раз после изменений
+
+  git add .                       # 1. собрать изменения
+  git commit -m "что изменил"     # 2. зафиксировать
+  git push                        # 3. отправить на GitHub
