@@ -52,13 +52,20 @@ body { background: transparent; }
 .page-head { text-align: center; margin-bottom: 26px; }
 .page-head h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: 32px;
+  font-weight: 800;
   letter-spacing: .5px;
   background: linear-gradient(90deg, #c4b5fd, #a855f7, #c4b5fd);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 0 26px var(--glow);
+  /* лёгкий тёмный контур (обводка по 4 сторонам) + мягкое свечение */
+  text-shadow:
+    -1px -1px 0 rgba(18,6,38,.6),
+     1px -1px 0 rgba(18,6,38,.6),
+    -1px  1px 0 rgba(18,6,38,.6),
+     1px  1px 0 rgba(18,6,38,.6),
+     0 0 22px var(--glow);
 }
 .subtitle { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
 
@@ -211,6 +218,16 @@ textarea { width: 100%; resize: vertical; min-height: 64px; }
 }
 .tri:hover .supp-remove { color: #ff6b81; }
 .supp-remove:hover { background: rgba(255,107,129,.18); color: #ff6b81; }
+.supp-restore {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+  padding: 10px; border: 1px dashed var(--line); border-radius: 10px;
+  background: rgba(20,14,34,.5);
+}
+.restore-chip {
+  background: #0f0b1c; border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 6px 11px; cursor: pointer; font: inherit;
+}
+.restore-chip:hover { border-color: #34d399; color: #d7ffe9; box-shadow: 0 0 12px rgba(52,211,153,.25); }
 
 .num-clear {
   background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px;

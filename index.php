@@ -13,7 +13,6 @@
   <main class="container">
     <header class="page-head">
       <h1>Трекинг-дневник</h1>
-      <p class="subtitle">показатели и зависимости — день за днём</p>
     </header>
 
     <!-- ШАБЛОН СОЗДАНИЯ ЗАПИСИ -->

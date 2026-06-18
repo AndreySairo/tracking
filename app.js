@@ -47,19 +47,22 @@ function fmtDate(iso) {
 }
 
 /* все определения пунктов (встроенные + кастомные).
- * Группа добавок расширяется пользовательскими элементами из config.suppItems. */
+ * Группа добавок = встроенные + пользовательские (config.suppItems), минус скрытые (config.suppHidden). */
 function allFields() {
   const map = Object.assign({}, BUILTIN);
   const extra = state.config.suppItems || [];
-  map.supplements = Object.assign({}, BUILTIN.supplements, {
-    items: BUILTIN.supplements.items.concat(extra),
-  });
+  const hidden = new Set(state.config.suppHidden || []);
+  const items = BUILTIN.supplements.items.concat(extra).filter((it) => !hidden.has(it.id));
+  map.supplements = Object.assign({}, BUILTIN.supplements, { items });
   for (const f of state.config.fields) map[f.id] = f;
   return map;
 }
-/* множество id пользовательских добавок (их можно удалять) */
-function customSuppIds() {
-  return new Set((state.config.suppItems || []).map((it) => it.id));
+/* название добавки по id (для списка возврата) */
+function suppItemName(id) {
+  const b = BUILTIN.supplements.items.find((i) => i.id === id);
+  if (b) return b.name;
+  const c = (state.config.suppItems || []).find((i) => i.id === id);
+  return c ? c.name : id;
 }
 function orderedFieldIds() {
   const map = allFields();
@@ -109,6 +112,7 @@ function normalizeState() {
   if (!state.config) state.config = { fields: [], order: DEFAULT_ORDER.slice() };
   if (!state.config.fields) state.config.fields = [];
   if (!state.config.suppItems) state.config.suppItems = [];
+  if (!state.config.suppHidden) state.config.suppHidden = [];
   if (!state.config.order || !state.config.order.length) state.config.order = DEFAULT_ORDER.slice();
   if (!state.records) state.records = [];
 }
@@ -299,16 +303,15 @@ function buildTri(ctrl, get, set) {
   ctrl.appendChild(el);
 }
 
-/* группа добавок: tri-state на каждый элемент + очистка + добавление своих */
+/* группа добавок: tri-state на каждый элемент + очистка + добавление своих + удаление/возврат */
 function buildGroup(ctrl, f) {
-  const custom = customSuppIds();
   const box = document.createElement('div');
   box.className = 'group-items';
   for (const it of f.items) {
     if (current[f.id][it.id] === undefined) current[f.id][it.id] = null;  // новый элемент — пустой
     const item = document.createElement('span');
     item.className = 'tri';
-    const rm = custom.has(it.id) ? `<span class="supp-remove" title="Удалить добавку">×</span>` : '';
+    const rm = `<span class="supp-remove" title="Удалить добавку">×</span>`;
     item.innerHTML = `<span class="mark"></span><span class="lbl">${esc(it.name)}</span>${rm}`;
     const paint = () => {
       const v = current[f.id][it.id];
@@ -318,7 +321,7 @@ function buildGroup(ctrl, f) {
       else { item.classList.add('state-empty'); item.querySelector('.mark').textContent = '—'; }
     };
     item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('supp-remove')) { e.stopPropagation(); removeSuppItem(it.id); return; }
+      if (e.target.classList.contains('supp-remove')) { e.stopPropagation(); hideSuppItem(it.id); return; }
       const v = current[f.id][it.id];
       current[f.id][it.id] = v === null || v === undefined ? true : v === true ? false : null;
       paint(); updateSaveBtn();
@@ -358,6 +361,28 @@ function buildGroup(ctrl, f) {
   inp.addEventListener('blur', commit);
   bar.appendChild(addBtn);
   bar.appendChild(inp);
+
+  // возврат удалённых добавок
+  const hidden = state.config.suppHidden || [];
+  if (hidden.length) {
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button'; restoreBtn.className = 'group-clear';
+    restoreBtn.textContent = `вернуть удалённые (${hidden.length})`;
+    const panel = document.createElement('div');
+    panel.className = 'supp-restore hidden';
+    for (const id of hidden) {
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'restore-chip';
+      chip.innerHTML = `↩ ${esc(suppItemName(id))}`;
+      chip.addEventListener('click', () => restoreSuppItem(id));
+      panel.appendChild(chip);
+    }
+    restoreBtn.addEventListener('click', () => panel.classList.toggle('hidden'));
+    bar.appendChild(restoreBtn);
+    ctrl.appendChild(bar);
+    ctrl.appendChild(panel);
+    return;
+  }
   ctrl.appendChild(bar);
 }
 
@@ -369,11 +394,17 @@ async function addSuppItem(name) {
   await saveConfig();
   renderForm();
 }
-async function removeSuppItem(id) {
-  const ok = await confirmDialog('Удалить эту добавку из группы? (сохранённые записи не меняются)');
-  if (!ok) return;
-  state.config.suppItems = (state.config.suppItems || []).filter((it) => it.id !== id);
-  if (current.supplements) delete current.supplements[id];
+/* «удаление» добавки = скрытие (обратимо через возврат) */
+async function hideSuppItem(id) {
+  if (!state.config.suppHidden) state.config.suppHidden = [];
+  if (!state.config.suppHidden.includes(id)) state.config.suppHidden.push(id);
+  await saveConfig();
+  renderForm();
+}
+async function restoreSuppItem(id) {
+  state.config.suppHidden = (state.config.suppHidden || []).filter((x) => x !== id);
+  if (!current.supplements) current.supplements = {};
+  if (current.supplements[id] === undefined) current.supplements[id] = null;
   await saveConfig();
   renderForm();
 }
