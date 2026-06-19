@@ -27,20 +27,76 @@ html, body {
 /* body прозрачный — иначе его заливка перекрывала бы слой .bg */
 body { background: transparent; }
 
-/* фон: по бокам тёмный, к центру больше фиолетового + мягкое свечение сверху */
+/* фон: по бокам тёмный, к центру — сезонный цвет + мягкое свечение сверху.
+   Цвета задаёт app.js через переменные; fallback (если скрипт не сработал) — фиолетовый. */
 .bg {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  transition: background 1.2s ease;
   background:
-    radial-gradient(1100px 620px at 50% 0%, rgba(168,85,247,.42), transparent 64%),
+    radial-gradient(1100px 620px at 50% 0%, var(--season-glow, rgba(168,85,247,.42)), transparent 64%),
     linear-gradient(90deg,
       #050509 0%,
-      #160c2c 26%,
-      #3a1773 50%,
-      #160c2c 74%,
+      var(--season-mid, #160c2c) 26%,
+      var(--season-center, #3a1773) 50%,
+      var(--season-mid, #160c2c) 74%,
       #050509 100%);
+}
+
+/* боковые слои с падающими частицами (снег/дождь/листья) — середина свободна */
+.fx-layer {
+  position: fixed;
+  top: 0; bottom: 0;
+  width: 14vw;
+  min-width: 70px;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: -1;
+}
+.fx-left { left: 0; }
+.fx-right { right: 0; }
+.particle {
+  position: absolute;
+  top: 0; left: 0;
+  will-change: transform, opacity;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+.particle.snow {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle, #ffffff, #bcd4ff);
+  box-shadow: 0 0 6px rgba(200,225,255,.85);
+  animation-name: fallSnow;
+}
+.particle.rain {
+  width: 2px; height: 16px; border-radius: 2px;
+  background: linear-gradient(to bottom, rgba(150,190,255,0), rgba(150,190,255,.9));
+  animation-name: fallRain;
+}
+.particle.leaf { animation-name: fallLeaf; }
+
+@keyframes fallSnow {
+  0%   { transform: translateY(-12vh) translateX(0); opacity: 0; }
+  10%  { opacity: .95; }
+  50%  { transform: translateY(48vh) translateX(var(--sway, 12px)); }
+  90%  { opacity: .95; }
+  100% { transform: translateY(112vh) translateX(0); opacity: 0; }
+}
+@keyframes fallRain {
+  0%   { transform: translateY(-12vh); opacity: 0; }
+  12%  { opacity: .6; }
+  100% { transform: translateY(112vh); opacity: .5; }
+}
+@keyframes fallLeaf {
+  0%   { transform: translateY(-12vh) translateX(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: .9; }
+  25%  { transform: translateY(20vh) translateX(16px) rotate(70deg); }
+  50%  { transform: translateY(50vh) translateX(-12px) rotate(165deg); }
+  75%  { transform: translateY(80vh) translateX(14px) rotate(265deg); }
+  90%  { opacity: .9; }
+  100% { transform: translateY(112vh) translateX(0) rotate(360deg); opacity: 0; }
 }
 
 .container {
@@ -435,3 +491,28 @@ button { font-family: inherit; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 .hidden { display: none !important; }
+
+/* ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ ЧАСТИЦ — удалить этот блок позже */
+.fx-test {
+  position: fixed;
+  left: 12px; bottom: 12px;
+  z-index: 100;
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  background: rgba(18,16,28,.88);
+  border: 1px solid var(--violet);
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 0 18px var(--glow);
+  font-size: 12px;
+}
+.fx-test .lbl { color: var(--muted); margin-right: 2px; }
+.fx-test button {
+  background: #0f0b1c; border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 5px 9px; cursor: pointer; font: inherit;
+}
+.fx-test button:hover { border-color: var(--violet); }
+.fx-test button.active {
+  border-color: var(--violet);
+  background: linear-gradient(180deg, var(--violet), var(--violet-dim));
+  color: #fff;
+}

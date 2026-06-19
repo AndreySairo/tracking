@@ -844,6 +844,138 @@ function setupModal() {
   });
 }
 
+/* ================= ФОН ПО СЕЗОНУ + ПОГОДЕ ================= */
+/* цвет центра градиента по месяцам (RGB), между месяцами плавно перетекает по дням */
+const MONTH_CENTER = [
+  [30, 74, 122],   // янв — голубоватый
+  [30, 78, 122],   // фев — голубоватый
+  [28, 90, 112],   // мар — голубо-бирюзовый
+  [28, 98, 88],    // апр — бирюзово-зелёный
+  [54, 118, 62],   // май — светло-зелёный
+  [34, 106, 42],   // июн — зелёный
+  [32, 102, 40],   // июл — зелёный
+  [40, 98, 36],    // авг — зелёный
+  [80, 100, 34],   // сен — жёлто-зелёный
+  [124, 82, 26],   // окт — янтарный
+  [144, 70, 20],   // ноя — оранжевый
+  [30, 74, 122],   // дек — голубоватый
+];
+const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+
+function seasonCenter() {
+  const now = new Date();
+  const m = now.getMonth();
+  const day = now.getDate();
+  const dim = new Date(now.getFullYear(), m + 1, 0).getDate();
+  const t = (day - 1) / dim;
+  const c1 = MONTH_CENTER[m];
+  const c2 = MONTH_CENTER[(m + 1) % 12];
+  return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
+}
+
+function applySeasonColor() {
+  const [r, g, b] = seasonCenter();
+  const mid = [Math.round(r * 0.42), Math.round(g * 0.42), Math.round(b * 0.42)];
+  const gl = [Math.round(r + (255 - r) * 0.4), Math.round(g + (255 - g) * 0.4), Math.round(b + (255 - b) * 0.4)];
+  const root = document.documentElement.style;
+  root.setProperty('--season-center', `rgb(${r},${g},${b})`);
+  root.setProperty('--season-mid', `rgb(${mid[0]},${mid[1]},${mid[2]})`);
+  root.setProperty('--season-glow', `rgba(${gl[0]},${gl[1]},${gl[2]},.42)`);
+}
+
+/* погода в Кирове через Open-Meteo (без ключа, можно прямо из браузера) */
+async function fetchWeatherCode() {
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=58.6035&longitude=49.6679&current=weather_code&timezone=auto';
+    const r = await fetch(url);
+    const d = await r.json();
+    return d && d.current ? d.current.weather_code : null;
+  } catch (e) {
+    console.info('Погода недоступна — частицы по сезону.', e);
+    return null;
+  }
+}
+
+/* код погоды WMO + сезон -> тип частиц */
+function weatherToParticles(code, month) {
+  const snow = [71, 73, 75, 77, 85, 86];
+  const rain = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99];
+  if (snow.includes(code)) return 'snow';
+  if (rain.includes(code)) return 'rain';
+  if ([8, 9, 10].includes(month)) return 'leaf';   // сен/окт/ноя — листопад (в API его нет, ведём по сезону)
+  return null;
+}
+
+let fxLeft = null, fxRight = null;
+function ensureFxLayers() {
+  if (fxLeft) return;
+  fxLeft = document.createElement('div'); fxLeft.className = 'fx-layer fx-left';
+  fxRight = document.createElement('div'); fxRight.className = 'fx-layer fx-right';
+  document.body.appendChild(fxLeft);
+  document.body.appendChild(fxRight);
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+function makeParticle(type, layer) {
+  const p = document.createElement('div');
+  p.className = 'particle ' + type;
+  let dur;
+  if (type === 'rain') dur = rnd(0.6, 1.2);
+  else if (type === 'snow') dur = rnd(6, 12);
+  else dur = rnd(6, 11);                     // leaf
+  p.style.left = rnd(0, 100) + '%';
+  p.style.animationDuration = dur.toFixed(2) + 's';
+  p.style.animationDelay = (-rnd(0, dur)).toFixed(2) + 's';   // отрицательная — стартуют вразнобой
+  p.style.setProperty('--sway', rnd(-18, 18).toFixed(0) + 'px');
+  if (type === 'snow') { const s = rnd(4, 9); p.style.width = p.style.height = s.toFixed(1) + 'px'; }
+  if (type === 'rain') p.style.height = rnd(10, 20).toFixed(0) + 'px';
+  if (type === 'leaf') { p.textContent = Math.random() < 0.5 ? '🍁' : '🍂'; p.style.fontSize = rnd(14, 24).toFixed(0) + 'px'; }
+  layer.appendChild(p);
+}
+
+function spawnParticles(type) {
+  ensureFxLayers();
+  fxLeft.innerHTML = '';
+  fxRight.innerHTML = '';
+  if (!type) return;
+  const perSide = type === 'rain' ? 22 : 14;
+  for (const layer of [fxLeft, fxRight]) {
+    for (let i = 0; i < perSide; i++) makeParticle(type, layer);
+  }
+}
+
+let fxOverride = null;   // ВРЕМЕННЫЙ ТЕСТ: null = авто(погода), иначе 'snow'/'rain'/'leaf'/'off'
+async function applyAmbient() {
+  applySeasonColor();
+  if (fxOverride !== null) { spawnParticles(fxOverride === 'off' ? null : fxOverride); return; }
+  const code = await fetchWeatherCode();
+  spawnParticles(weatherToParticles(code, new Date().getMonth()));
+}
+
+/* ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ ЧАСТИЦ — удалить этот блок и вызов setupFxTest() позже */
+function setupFxTest() {
+  const panel = document.createElement('div');
+  panel.className = 'fx-test';
+  panel.innerHTML = '<span class="lbl">тест частиц:</span>';
+  const opts = [['авто', null], ['❄ снег', 'snow'], ['💧 дождь', 'rain'], ['🍂 листья', 'leaf'], ['выкл', 'off']];
+  const btns = [];
+  for (const [label, val] of opts) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', () => {
+      fxOverride = val;
+      btns.forEach((x) => x.classList.toggle('active', x === b));
+      if (val === null) applyAmbient();
+      else spawnParticles(val === 'off' ? null : val);
+    });
+    btns.push(b);
+    panel.appendChild(b);
+  }
+  btns[0].classList.add('active');
+  document.body.appendChild(panel);
+}
+
 /* ================= СТАРТ ================= */
 async function init() {
   await loadData();
@@ -858,5 +990,8 @@ async function init() {
   setupModal();
   renderForm();
   renderHistory();
+  applyAmbient();
+  setInterval(applyAmbient, 30 * 60 * 1000);   // обновлять погоду раз в 30 минут
+  setupFxTest();   // ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ — удалить позже
 }
 init();
