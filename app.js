@@ -15,7 +15,7 @@ const BUILTIN = {
   abstinence:   { id: 'abstinence',   name: 'День воздержания',        type: 'int',  min: 0, max: 100000 },
   productivity: { id: 'productivity', name: 'Продуктивность',          type: 'int',  min: 1, max: 10, required: true, colored: true },
   comment:      { id: 'comment',      name: 'Комментарий',             type: 'text' },
-  steps:        { id: 'steps',        name: 'Шаги за прошлый день',    type: 'int',  min: 0, max: 1000000, optionalStats: true },
+  steps:        { id: 'steps',        name: 'Шаги',                    type: 'int',  min: 0, max: 1000000, optionalStats: true },
 };
 const DEFAULT_ORDER = ['sleep', 'supplements', 'abstinence', 'productivity', 'comment', 'steps'];
 
@@ -24,8 +24,9 @@ const MONTHS_FULL = ['Январь','Февраль','Март','Апрель','
 
 /* состояние */
 let state = { config: { fields: [], order: DEFAULT_ORDER.slice() }, records: [] };
-let current = {};         // значения текущей (создаваемой) записи: fieldId -> value
+let current = {};         // значения текущей (создаваемой/редактируемой) записи: fieldId -> value
 let currentView = 'days';
+let editing = false;      // режим правки сохранённого дня
 
 /* ---------- утилиты ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -44,6 +45,25 @@ function fmtDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const wd = ['вс','пн','вт','ср','чт','пт','сб'][new Date(y, m - 1, d).getDay()];
   return `${d} ${MONTHS[m - 1]} ${y}, ${wd}`;
+}
+function fmtNum(n) { return Number(n).toLocaleString('ru-RU'); }
+
+/* 5 кнопок быстрой подстановки шагов: топ по популярности из прошлых записей.
+ * 8000/10000/15000/20000 — лишь стартовые значения, добивают список, пока истории мало. */
+function stepSuggestions() {
+  const defaults = [8000, 10000, 15000, 20000];
+  const freq = new Map();
+  for (const r of state.records) {
+    const v = r.values.steps;
+    if (v != null) freq.set(v, (freq.get(v) || 0) + 1);
+  }
+  const popular = [...freq.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0] - a[0])    // по частоте, затем по величине
+    .map(([v]) => v);
+  const list = [];
+  for (const v of popular) { if (list.length >= 5) break; if (!list.includes(v)) list.push(v); }
+  for (const v of defaults) { if (list.length >= 5) break; if (!list.includes(v)) list.push(v); }
+  return list.sort((a, b) => a - b).slice(0, 5);    // на экране — по возрастанию
 }
 
 /* все определения пунктов (встроенные + кастомные).
@@ -265,12 +285,37 @@ function buildInt(ctrl, f) {
     inp.addEventListener('input', () => {
       current[f.id] = inp.value === '' ? null : Number(inp.value);
       updateSaveBtn();
+      if (ctrl._paintChips) ctrl._paintChips();
     });
     ctrl.appendChild(inp);
     const clr = document.createElement('button');
     clr.type = 'button'; clr.className = 'num-clear'; clr.textContent = 'очистить';
-    clr.addEventListener('click', () => { inp.value = ''; current[f.id] = null; updateSaveBtn(); });
+    clr.addEventListener('click', () => {
+      inp.value = ''; current[f.id] = null; updateSaveBtn();
+      if (ctrl._paintChips) ctrl._paintChips();
+    });
     ctrl.appendChild(clr);
+
+    // быстрая подстановка шагов
+    if (f.id === 'steps') {
+      const quick = document.createElement('div');
+      quick.className = 'step-quick';
+      const chips = [];
+      for (const v of stepSuggestions()) {
+        const chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'step-chip';
+        chip.dataset.val = v;
+        chip.textContent = fmtNum(v);
+        chip.addEventListener('click', () => {
+          inp.value = v; current[f.id] = v; updateSaveBtn(); ctrl._paintChips();
+        });
+        chips.push(chip);
+        quick.appendChild(chip);
+      }
+      ctrl._paintChips = () => chips.forEach((c) => c.classList.toggle('active', Number(c.dataset.val) === current[f.id]));
+      ctrl._paintChips();
+      ctrl.appendChild(quick);
+    }
   }
 }
 
@@ -495,17 +540,52 @@ async function saveRecord() {
   if ($('#saveBtn').disabled) return;
   const date = $('#recDate').value;
   const existing = state.records.find((r) => r.date === date);
-  if (existing) {
+  // при обычном создании предупреждаем о перезаписи; в режиме правки — это и есть цель
+  if (existing && !editing) {
     const ok = await confirmDialog(`Запись за ${fmtDate(date)} уже есть. Перезаписать её?`);
     if (!ok) return;
   }
   const record = { id: existing ? existing.id : uid(), date, values: JSON.parse(JSON.stringify(current)) };
   await apiPost({ action: 'save_record', record });
   await loadData();
+  resetForm();
+  renderHistory();
+}
+
+/* загрузить сохранённый день в форму для правки */
+function editRecord(r) {
+  editing = true;
+  resetCurrent();                              // полный набор полей с пустыми значениями
+  for (const k in r.values) {                  // наложить сохранённые значения
+    const v = r.values[k];
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      current[k] = Object.assign(current[k] || {}, v);   // группы (добавки)
+    } else {
+      current[k] = v;
+    }
+  }
+  $('#recDate').value = r.date;
+  collapseTemplate(false);
+  setTemplateMode();
+  renderForm();
+  updateSaveBtn();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* сброс формы в режим «новая запись» */
+function resetForm() {
+  editing = false;
   resetCurrent();
   $('#recDate').value = todayLocal();
+  setTemplateMode();
   renderForm();
-  renderHistory();
+}
+
+/* подписи/кнопки в зависимости от режима */
+function setTemplateMode() {
+  $('#templateTitle').textContent = editing ? 'Редактирование записи' : 'Новая запись';
+  $('#saveBtn').textContent = editing ? 'Сохранить изменения' : 'Сохранить';
+  $('#cancelEdit').classList.toggle('hidden', !editing);
 }
 
 /* ================= ИСТОРИЯ ================= */
@@ -595,6 +675,11 @@ function renderDayDetail(r) {
   }
   const actions = document.createElement('div');
   actions.className = 'detail-actions';
+  const edit = document.createElement('button');
+  edit.className = 'edit-btn';
+  edit.textContent = '✎ Редактировать';
+  edit.addEventListener('click', (e) => { e.stopPropagation(); editRecord(r); });
+  actions.appendChild(edit);
   const del = document.createElement('button');
   del.className = 'del-btn';
   del.textContent = '🗑 Удалить день';
@@ -766,6 +851,7 @@ async function init() {
   $('#recDate').value = todayLocal();
   $('#recDate').addEventListener('change', updateSaveBtn);
   $('#saveBtn').addEventListener('click', saveRecord);
+  $('#cancelEdit').addEventListener('click', resetForm);
   setupAddField();
   setupViewSwitch();
   setupTemplateToggle();

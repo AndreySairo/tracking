@@ -53,19 +53,15 @@ body { background: transparent; }
 .page-head h1 {
   margin: 0;
   font-size: 32px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: .5px;
-  background: linear-gradient(90deg, #c4b5fd, #a855f7, #c4b5fd);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* лёгкий тёмный контур (обводка по 4 сторонам) + мягкое свечение */
+  color: #371466;                                  /* темновато-фиолетовый текст */
+  -webkit-text-stroke: 0.5px rgba(8,3,18,.85);     /* тонкий тёмный контур */
+  /* светлое сияние, исходящее от контура */
   text-shadow:
-    -1px -1px 0 rgba(18,6,38,.6),
-     1px -1px 0 rgba(18,6,38,.6),
-    -1px  1px 0 rgba(18,6,38,.6),
-     1px  1px 0 rgba(18,6,38,.6),
-     0 0 22px var(--glow);
+    0 0 8px rgba(199,170,255,.9),
+    0 0 18px rgba(168,85,247,.7),
+    0 0 30px rgba(139,92,246,.45);
 }
 .subtitle { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
 
@@ -235,6 +231,20 @@ textarea { width: 100%; resize: vertical; min-height: 64px; }
 }
 .num-clear:hover { color: var(--violet-2); }
 
+/* быстрые кнопки шагов — справа от поля */
+.step-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.step-chip {
+  background: #0f0b1c; border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 6px 11px; cursor: pointer; font: inherit;
+  transition: all .12s;
+}
+.step-chip:hover { border-color: var(--violet); }
+.step-chip.active {
+  border-color: var(--violet);
+  background: linear-gradient(180deg, var(--violet), var(--violet-dim));
+  box-shadow: 0 0 14px var(--glow); color: #fff;
+}
+
 /* ====== кнопки ====== */
 button { font-family: inherit; }
 .ghost {
@@ -386,12 +396,23 @@ button { font-family: inherit; }
 .supp-line .em { color: var(--muted); }
 .detail-actions { margin-top: 12px; text-align: right; }
 
-/* del button */
+.detail-actions { display: flex; gap: 8px; justify-content: flex-end; }
+/* edit / del buttons */
+.edit-btn {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+}
+.edit-btn:hover { color: var(--violet-2); border-color: var(--violet); background: rgba(139,92,246,.12); }
 .del-btn {
   background: none; border: 1px solid var(--line); color: var(--muted);
   border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px;
 }
 .del-btn:hover { color: #ff6b81; border-color: #ff6b81; background: rgba(255,107,129,.1); }
+
+/* строка кнопок сохранения */
+.save-row { display: flex; align-items: stretch; gap: 10px; }
+.save-row .save { flex: 1; }
+.save-row #cancelEdit { white-space: nowrap; }
 
 /* ====== модалка ====== */
 .modal-overlay {

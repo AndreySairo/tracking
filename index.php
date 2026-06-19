@@ -18,7 +18,7 @@
     <!-- ШАБЛОН СОЗДАНИЯ ЗАПИСИ -->
     <section class="card template" id="template">
       <div class="template-head" id="templateHead">
-        <h2>Новая запись</h2>
+        <h2 id="templateTitle">Новая запись</h2>
         <button id="toggleTemplate" class="ghost small" type="button">свернуть</button>
       </div>
 
@@ -50,7 +50,10 @@
           </div>
         </div>
 
-        <button id="saveBtn" class="save" type="button" disabled>Сохранить</button>
+        <div class="save-row">
+          <button id="saveBtn" class="save" type="button" disabled>Сохранить</button>
+          <button id="cancelEdit" class="ghost hidden" type="button">Отмена правки</button>
+        </div>
       </div>
     </section>
 
