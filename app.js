@@ -641,9 +641,11 @@ function avgSteps(recs) {
   if (!vals.length) return null;
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
-/* средний балл сна (только числовые 1..5; «S» и пустые не в счёт) */
+/* средний балл сна (1..5; «S» считается как 6; пустые не в счёт) */
 function avgSleep(recs) {
-  const vals = recs.map((r) => r.values.sleep).filter((v) => typeof v === 'number');
+  const vals = recs.map((r) => r.values.sleep)
+    .map((v) => (v === 'S' ? 6 : v))
+    .filter((v) => typeof v === 'number');
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
