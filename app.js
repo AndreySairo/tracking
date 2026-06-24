@@ -275,6 +275,23 @@ function buildInt(ctrl, f) {
       paint();
       ctrl.appendChild(b);
     }
+    // особая кнопка «S» для сна (после 5)
+    if (f.id === 'sleep') {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'val-btn sleep-s';
+      b.textContent = 'S';
+      b.title = 'Особый сон';
+      const paint = () => b.classList.toggle('active', current[f.id] === 'S');
+      b.addEventListener('click', () => {
+        current[f.id] = (current[f.id] === 'S') ? null : 'S';
+        ctrl.querySelectorAll('.val-btn').forEach((el) => el._paint && el._paint());
+        updateSaveBtn();
+      });
+      b._paint = paint;
+      paint();
+      ctrl.appendChild(b);
+    }
   } else {
     const inp = document.createElement('input');
     inp.type = 'number';
@@ -624,6 +641,12 @@ function avgSteps(recs) {
   if (!vals.length) return null;
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
+/* средний балл сна (только числовые 1..5; «S» и пустые не в счёт) */
+function avgSleep(recs) {
+  const vals = recs.map((r) => r.values.sleep).filter((v) => typeof v === 'number');
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
 
 /* сколько раз каждая добавка принята за период (value === true), по убыванию */
 function supplementStats(recs) {
@@ -682,12 +705,17 @@ function renderPeriodSummary(container, recs) {
   }
   container.appendChild(b1);
 
+  const sleep = avgSleep(recs);
   const abs = abstinenceStats(recs);
+  const steps = avgSteps(recs);
+  const stat = (label, val) => `<span class="summary-label">${label}</span> <b>${val}</b>`;
   const b2 = document.createElement('div');
-  b2.className = 'summary-block';
-  b2.innerHTML = abs
-    ? `<span class="summary-label">Воздержание в среднем:</span> <b>${abs.avg.toFixed(1)}</b>`
-    : `<span class="summary-label">Воздержание в среднем:</span> <span class="em">—</span>`;
+  b2.className = 'summary-block summary-averages';
+  b2.innerHTML = [
+    stat('Сон в среднем:', sleep == null ? '—' : sleep.toFixed(1)),
+    stat('Воздержание в среднем:', abs ? abs.avg.toFixed(1) : '—'),
+    stat('Шаги в среднем:', steps == null ? '—' : fmtNum(steps)),
+  ].join('<span class="sep">·</span>');
   container.appendChild(b2);
 }
 
@@ -855,8 +883,9 @@ function renderWeeks(body, recs) {
   for (const k of keys) {
     const list = weeks.get(k).slice().sort((a, b) => b.date.localeCompare(a.date));
     const w = k.split('-W');
-    const sub = `${weekRange(list[0].date)} · дней: ${list.length}${avgSteps(list) != null ? ` · шаги⌀ ${avgSteps(list)}` : ''}`;
-    body.appendChild(makeGroupRow(`Неделя ${Number(w[1])}, ${w[0]}`, sub, list, (nested) => {
+    const title = weekRange(list[0].date);                      // диапазон дней — слева
+    const sub = `Неделя ${Number(w[1])}, ${w[0]} · дней: ${list.length}`;
+    body.appendChild(makeGroupRow(title, sub, list, (nested) => {
       list.forEach((r) => nested.appendChild(renderDayRow(r)));
     }));
   }
@@ -868,7 +897,7 @@ function renderMonths(body, recs) {
   for (const k of keys) {
     const list = months.get(k).slice().sort((a, b) => b.date.localeCompare(a.date));
     const [y, m] = k.split('-').map(Number);
-    const sub = `дней: ${list.length}${avgSteps(list) != null ? ` · шаги⌀ ${avgSteps(list)}` : ''}`;
+    const sub = `дней: ${list.length}`;
     body.appendChild(makeGroupRow(`${MONTHS_FULL[m - 1]} ${y}`, sub, list, (nested) => {
       // месяц -> недели -> дни
       const weeks = groupBy(list, weekKey);
@@ -876,8 +905,9 @@ function renderMonths(body, recs) {
       for (const wk of wkeys) {
         const wlist = weeks.get(wk).slice().sort((a, b) => b.date.localeCompare(a.date));
         const w = wk.split('-W');
-        const wsub = `${weekRange(wlist[0].date)} · дней: ${wlist.length}`;
-        nested.appendChild(makeGroupRow(`Неделя ${Number(w[1])}`, wsub, wlist, (n2) => {
+        const wtitle = weekRange(wlist[0].date);                 // диапазон дней — слева
+        const wsub = `Неделя ${Number(w[1])} · дней: ${wlist.length}`;
+        nested.appendChild(makeGroupRow(wtitle, wsub, wlist, (n2) => {
           wlist.forEach((r) => n2.appendChild(renderDayRow(r)));
         }));
       }
