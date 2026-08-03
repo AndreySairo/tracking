@@ -27,76 +27,20 @@ html, body {
 /* body прозрачный — иначе его заливка перекрывала бы слой .bg */
 body { background: transparent; }
 
-/* фон: по бокам тёмный, к центру — сезонный цвет + мягкое свечение сверху.
-   Цвета задаёт app.js через переменные; fallback (если скрипт не сработал) — фиолетовый. */
+/* фон: по бокам тёмный, к центру больше фиолетового + мягкое свечение сверху */
 .bg {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  transition: background 1.2s ease;
   background:
-    radial-gradient(1100px 620px at 50% 0%, var(--season-glow, rgba(168,85,247,.42)), transparent 64%),
+    radial-gradient(1100px 620px at 50% 0%, rgba(168,85,247,.42), transparent 64%),
     linear-gradient(90deg,
       #050509 0%,
-      var(--season-mid, #160c2c) 26%,
-      var(--season-center, #3a1773) 50%,
-      var(--season-mid, #160c2c) 74%,
+      #160c2c 26%,
+      #3a1773 50%,
+      #160c2c 74%,
       #050509 100%);
-}
-
-/* боковые слои с падающими частицами (снег/дождь/листья) — середина свободна */
-.fx-layer {
-  position: fixed;
-  top: 0; bottom: 0;
-  width: 14vw;
-  min-width: 70px;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: -1;
-}
-.fx-left { left: 0; }
-.fx-right { right: 0; }
-.particle {
-  position: absolute;
-  top: 0; left: 0;
-  will-change: transform, opacity;
-  animation-iteration-count: infinite;
-  animation-timing-function: linear;
-}
-.particle.snow {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: radial-gradient(circle, #ffffff, #bcd4ff);
-  box-shadow: 0 0 6px rgba(200,225,255,.85);
-  animation-name: fallSnow;
-}
-.particle.rain {
-  width: 2px; height: 16px; border-radius: 2px;
-  background: linear-gradient(to bottom, rgba(150,190,255,0), rgba(150,190,255,.9));
-  animation-name: fallRain;
-}
-.particle.leaf { animation-name: fallLeaf; }
-
-@keyframes fallSnow {
-  0%   { transform: translateY(-12vh) translateX(0); opacity: 0; }
-  10%  { opacity: .95; }
-  50%  { transform: translateY(48vh) translateX(var(--sway, 12px)); }
-  90%  { opacity: .95; }
-  100% { transform: translateY(112vh) translateX(0); opacity: 0; }
-}
-@keyframes fallRain {
-  0%   { transform: translateY(-12vh); opacity: 0; }
-  12%  { opacity: .6; }
-  100% { transform: translateY(112vh); opacity: .5; }
-}
-@keyframes fallLeaf {
-  0%   { transform: translateY(-12vh) translateX(0) rotate(0deg); opacity: 0; }
-  10%  { opacity: .9; }
-  25%  { transform: translateY(20vh) translateX(16px) rotate(70deg); }
-  50%  { transform: translateY(50vh) translateX(-12px) rotate(165deg); }
-  75%  { transform: translateY(80vh) translateX(14px) rotate(265deg); }
-  90%  { opacity: .9; }
-  100% { transform: translateY(112vh) translateX(0) rotate(360deg); opacity: 0; }
 }
 
 .container {
@@ -234,6 +178,227 @@ textarea { width: 100%; resize: vertical; min-height: 64px; }
   color: #fff;
 }
 /* для продуктивности цвет приходит инлайном (active) */
+
+/* особая кнопка «S» для сна — розовая со сверканием */
+.val-btn.sleep-s { position: relative; font-weight: 800; }
+.val-btn.sleep-s.active {
+  border-color: #ff8ccb;
+  background: linear-gradient(180deg, #ff7ac1, #ff4fa3);
+  color: #fff;
+  animation: sPulse 1.3s ease-in-out infinite;
+}
+.val-btn.sleep-s.active::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 14px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle 2px at 12% 22%, #fff 99%, transparent),
+    radial-gradient(circle 2px at 86% 30%, #ffe0f3 99%, transparent),
+    radial-gradient(circle 1.5px at 28% 84%, #fff 99%, transparent),
+    radial-gradient(circle 2px at 72% 80%, #ffd6ef 99%, transparent),
+    radial-gradient(circle 1.5px at 50% 6%, #fff 99%, transparent),
+    radial-gradient(circle 1.5px at 5% 60%, #ffe0f3 99%, transparent),
+    radial-gradient(circle 1.5px at 95% 62%, #fff 99%, transparent);
+  animation: sTwinkle 1.1s steps(1) infinite;
+}
+@keyframes sPulse {
+  0%, 100% { box-shadow: 0 0 8px #ff4fa3, 0 0 16px rgba(255,79,163,.6); }
+  50%      { box-shadow: 0 0 16px #ff4fa3, 0 0 30px rgba(255,120,200,.9), 0 0 44px rgba(180,120,255,.5); }
+}
+@keyframes sTwinkle {
+  0%   { opacity: .2; }
+  25%  { opacity: 1; }
+  50%  { opacity: .35; }
+  75%  { opacity: .9; }
+  100% { opacity: .2; }
+}
+
+/* особая кнопка «S» продуктивности (ранг выше 10) — тёмно-алое ядро,
+   тонкая белоснежная кромка, медленно поднимающееся пламя/дым (учитывается как 12 баллов) */
+.val-btn.prod-s { position: relative; font-weight: 800; }
+.val-btn.prod-s.active {
+  border: 1px solid transparent;               /* без жёсткой рамки */
+  color: #fff5f0;
+  /* алое ядро ранга, к краю — тёплый оттенок без белого (углы больше не светятся) */
+  background: radial-gradient(circle at 50% 46%,
+              #9a1100 0%, #c41600 40%, #e23a14 68%, #ff7a45 86%, #ff9b6b 100%);
+  text-shadow: 0 0 4px rgba(0,0,0,.55), 0 0 9px rgba(120,200,255,.45);
+  /* дышащая аура Ци по всему периметру: переливается тёплый ↔ синий */
+  animation: prodSAura 6.5s ease-in-out infinite;
+}
+/* аура: медленно расходится во все стороны, перетекая из огня в синюю энергию */
+@keyframes prodSAura {
+  0%, 100% {
+    box-shadow: 0 0 14px 5px rgba(255,150,90,.42),
+                0 0 30px 13px rgba(255,90,50,.26),
+                0 0 50px 22px rgba(90,150,255,.16);
+  }
+  50% {
+    box-shadow: 0 0 18px 7px rgba(130,195,255,.46),
+                0 0 38px 17px rgba(90,120,255,.3),
+                0 0 64px 30px rgba(255,100,60,.2);
+  }
+}
+/* вращающийся энергетический ореол Ци — тёплое пламя с прохладным синим всполохом
+   (огонь ↔ лёд), сильно размыт в дымку, медленно крутится позади кнопки */
+.val-btn.prod-s.active::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 14px;
+  background: conic-gradient(from 0deg,
+              #ff5a2e 0%, #ff9b3d 18%, #ffc24d 30%,
+              #5ad6ff 50%, #4d8bff 62%,
+              #ff7a3d 82%, #ff5a2e 100%);
+  filter: blur(11px);
+  opacity: .5;
+  animation: prodSSwirl 7s linear infinite;
+}
+@keyframes prodSSwirl { to { transform: rotate(360deg); } }
+/* восходящий вихрь энергии: горячее основание утоплено в кнопку, кверху
+   перетекает в холодную бирюзу Ци; непрерывно гуляет вбок, как газ */
+.val-btn.prod-s.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 36%;
+  width: 38px;
+  height: 44px;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  border-radius: 50% / 58% 58% 42% 42%;
+  background: radial-gradient(ellipse 68% 74% at 50% 80%,
+              rgba(255,80,25,.55) 0%, rgba(255,150,70,.5) 32%,
+              rgba(120,215,255,.5) 66%, rgba(190,240,255,0) 100%);
+  filter: blur(6px);
+  animation: prodSFlame 5s ease-in-out infinite;
+}
+/* непрерывное гуляние: основание на месте, ширина/наклон меняются плавно;
+   клуб мотает вбок — будто энергия расползается; opacity не падает до нуля */
+@keyframes prodSFlame {
+  0%, 100% { transform: translateX(-50%) scaleX(1)    scaleY(1)    skewX(0deg);  opacity: .8;  }
+  20%      { transform: translateX(-58%) scaleX(1.28) scaleY(1.12) skewX(8deg);  opacity: .95; }
+  40%      { transform: translateX(-44%) scaleX(.84)  scaleY(1.22) skewX(-7deg); opacity: .78; }
+  60%      { transform: translateX(-56%) scaleX(1.32) scaleY(.96)  skewX(6deg);  opacity: .9;  }
+  80%      { transform: translateX(-47%) scaleX(1.06) scaleY(1.15) skewX(-4deg); opacity: .85; }
+}
+
+/* бейдж ранга S в истории (день/среднее) — то же тёмно-алое ядро, ровное свечение без морганий */
+.badge.prod-s {
+  color: #fff5f0;
+  border: 1px solid #ffb89c;
+  background: radial-gradient(circle at 50% 52%,
+              #8c0f00 0%, #b81400 40%, #e23a14 70%, #ff8a5c 88%, #ffe1d4 97%, #fff 100%);
+  text-shadow: 0 0 4px rgba(0,0,0,.5);
+  box-shadow: 0 0 12px rgba(216,38,10,.65), 0 0 22px rgba(255,90,50,.4);
+}
+
+/* ====== достижения ====== */
+.ach-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.ach-empty { color: var(--muted); font-size: 13px; }
+.ach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(250,204,21,.45);
+  background: rgba(250,204,21,.07);
+  color: var(--text);
+}
+.ach-chip .ach-star { color: #facc15; text-shadow: 0 0 8px rgba(250,204,21,.6); }
+.ach-chip .ach-text { overflow-wrap: anywhere; }
+.ach-remove {
+  color: var(--muted); font-weight: 700; cursor: pointer;
+  border-radius: 5px; padding: 0 4px; line-height: 1;
+}
+.ach-remove:hover { color: #ff6b81; background: rgba(255,107,129,.18); }
+.ach-bar { width: 100%; display: flex; gap: 8px; margin-top: 10px; }
+.ach-add {
+  background: none;
+  border: 1px dashed rgba(250,204,21,.5);
+  color: #facc15;
+  border-radius: 9px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font: inherit;
+  transition: all .12s;
+}
+.ach-add:hover { border-color: #facc15; box-shadow: 0 0 14px rgba(250,204,21,.3); }
+.ach-form {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: rgba(20,14,34,.5);
+}
+.ach-form input[type="text"] { flex: 1; min-width: 180px; }
+
+/* достижения в деталях дня */
+.ach-view { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.ach-chip.view { padding: 4px 9px; font-size: 13px; }
+
+/* достижения в сводке недели/месяца */
+.summary-ach { flex-direction: column; align-items: flex-start; gap: 6px; }
+.ach-rows { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.ach-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(250,204,21,.25);
+  background: rgba(250,204,21,.06);
+}
+.ach-row .ach-star { color: #facc15; }
+.ach-row .ach-date { color: var(--muted); white-space: nowrap; min-width: 52px; }
+.ach-row .ach-text { overflow-wrap: anywhere; }
+
+/* пометка достижений в строке дня */
+.row-ach {
+  color: #facc15;
+  font-size: 13px;
+  border: 1px solid rgba(250,204,21,.35);
+  border-radius: 8px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ====== эмоциональная оценка ====== */
+.mood-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.detail-item .mood-dot { margin-right: 7px; vertical-align: -2px; }
+.mood-val { font-weight: 600; }
+
+/* многострочный текст (комментарий) — переносы строк сохраняются */
+.text-block {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.detail-item .em { color: var(--muted); }
 
 /* tri-state чекбоксы */
 .tri {
@@ -435,6 +600,32 @@ button { font-family: inherit; }
 .row.open > .row-body { display: block; }
 .nested { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
 
+/* сводка периода (недели/месяцы) */
+.period-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(139,92,246,.06);
+  font-size: 13px;
+}
+.summary-block { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.summary-averages { gap: 6px; }
+.summary-averages .sep { color: var(--violet); opacity: .6; margin: 0 2px; }
+.summary-label { color: var(--muted); }
+.supp-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.supp-stat {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.supp-stat b { font-weight: 700; }
+
 /* детали дня */
 .detail-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .detail-item {
@@ -445,8 +636,12 @@ button { font-family: inherit; }
   border-radius: 8px;
   background: rgba(139,92,246,.06);
 }
-.detail-item .k { color: var(--muted); }
-.detail-item .v { text-align: right; }
+.detail-item .k { color: var(--muted); flex: 0 0 auto; }
+.detail-item .v { text-align: right; flex: 1 1 auto; min-width: 0; }
+/* строка с многострочным текстом / списком — название сверху, значение во всю ширину */
+.detail-item.stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+.detail-item.stacked .v { text-align: left; }
+.detail-item.stacked .ach-view { justify-content: flex-start; }
 .supp-line .yes { color: #34d399; }
 .supp-line .no { color: #f87171; }
 .supp-line .em { color: var(--muted); }
@@ -491,28 +686,3 @@ button { font-family: inherit; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 .hidden { display: none !important; }
-
-/* ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ ЧАСТИЦ — удалить этот блок позже */
-.fx-test {
-  position: fixed;
-  left: 12px; bottom: 12px;
-  z-index: 100;
-  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
-  background: rgba(18,16,28,.88);
-  border: 1px solid var(--violet);
-  border-radius: 10px;
-  padding: 8px 10px;
-  box-shadow: 0 0 18px var(--glow);
-  font-size: 12px;
-}
-.fx-test .lbl { color: var(--muted); margin-right: 2px; }
-.fx-test button {
-  background: #0f0b1c; border: 1px solid var(--line); color: var(--text);
-  border-radius: 8px; padding: 5px 9px; cursor: pointer; font: inherit;
-}
-.fx-test button:hover { border-color: var(--violet); }
-.fx-test button.active {
-  border-color: var(--violet);
-  background: linear-gradient(180deg, var(--violet), var(--violet-dim));
-  color: #fff;
-}

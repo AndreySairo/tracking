@@ -10,7 +10,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 $DATA = __DIR__ . '/data.json';
 
-$DEFAULT_ORDER = ['sleep', 'supplements', 'abstinence', 'productivity', 'comment', 'steps'];
+$DEFAULT_ORDER = ['sleep', 'supplements', 'abstinence', 'productivity', 'mood', 'comment', 'steps', 'achievements'];
 
 function load_data($DATA, $DEFAULT_ORDER) {
     if (!file_exists($DATA)) {

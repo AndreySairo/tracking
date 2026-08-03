@@ -14,10 +14,25 @@ const BUILTIN = {
                   ] },
   abstinence:   { id: 'abstinence',   name: 'День воздержания',        type: 'int',  min: 0, max: 100000 },
   productivity: { id: 'productivity', name: 'Продуктивность',          type: 'int',  min: 1, max: 10, required: true, colored: true },
+  mood:         { id: 'mood',         name: 'Эмоциональная оценка',    type: 'int',  min: 1, max: 5, colored: true, palette: 'mood' },
   comment:      { id: 'comment',      name: 'Комментарий',             type: 'text' },
   steps:        { id: 'steps',        name: 'Шаги',                    type: 'int',  min: 0, max: 1000000, optionalStats: true },
+  achievements: { id: 'achievements', name: 'Достижения',              type: 'list' },
 };
-const DEFAULT_ORDER = ['sleep', 'supplements', 'abstinence', 'productivity', 'comment', 'steps'];
+const DEFAULT_ORDER = ['sleep', 'supplements', 'abstinence', 'productivity', 'mood', 'comment', 'steps', 'achievements'];
+
+/* подсказки при наведении на баллы сна (1..5 и S) */
+const SLEEP_HINTS = {
+  1: 'ужасный, не было или почти не было сна',
+  2: 'плохой, частые просыпания, небольшая доля сна, нехватка восстановления',
+  3: 'удовлетворительный, хорошая доля сна, легкая разбитость утром, снов не наблюдалось',
+  4: 'хороший, легкость утром, намеки или очертания сноведений',
+  5: 'отличный, легкое и энергичное состояние, есть сны, которые можно вспомнить хоть в небольших деталях',
+  S: '1-ранговый, легкое и энергичное состояние, много снов с деталями, которые можно расписать объемным текстом, возможно есть легкие катарсисные состояния',
+};
+
+/* подсказки при наведении на баллы эмоциональной оценки (1..5) */
+const MOOD_HINTS = { 1: 'красный', 2: 'оранжевый', 3: 'жёлтый', 4: 'зелёный', 5: 'розовый' };
 
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const MONTHS_FULL = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -111,6 +126,13 @@ function prodColorAvg(v) {
     const hue = ((Math.max(1, v) - 1) / 6) * 120;
     return `hsl(${hue}, 80%, 48%)`;
   }
+  // выше 10 (доля рангов S, считающихся за 12) — розовый(10) -> алое пламя(12)
+  if (v >= 10) {
+    const t = Math.min(1, (v - 10) / 2);
+    const a = [255, 79, 163], b = [255, 120, 90];
+    const mix = a.map((x, i) => Math.round(x + (b[i] - x) * t));
+    return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
+  }
   // интерполяция зелёный(7)->синий(8)->фиолет(9)->розовый(10)
   const stops = { 7: [46,160,67], 8: [41,121,255], 9: [155,48,255], 10: [255,79,163] };
   const lo = Math.floor(v), hi = Math.min(10, lo + 1), t = v - lo;
@@ -118,6 +140,27 @@ function prodColorAvg(v) {
   const mix = a.map((x, i) => Math.round(x + (b[i] - x) * t));
   return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
 }
+
+/* ---------- цвет эмоциональной оценки ---------- */
+/* 1 красный, 2 оранжевый, 3 жёлтый, 4 зелёный, 5 розовый */
+/* зелёный (4) — тот же, что у продуктивности 7: hsl(120, 85%, 50%) = rgb(19,236,19) */
+const MOOD_COLORS = { 1: [239, 68, 68], 2: [249, 115, 22], 3: [250, 204, 21], 4: [19, 236, 19], 5: [255, 79, 163] };
+function moodColor(v) {
+  const c = MOOD_COLORS[v];
+  return c ? `rgb(${c[0]},${c[1]},${c[2]})` : '#555';
+}
+/* непрерывная версия для средних (дробных) баллов */
+function moodColorAvg(v) {
+  if (v == null) return '#555';
+  const lo = Math.max(1, Math.min(5, Math.floor(v)));
+  const hi = Math.min(5, lo + 1);
+  const t = Math.max(0, Math.min(1, v - lo));
+  const a = MOOD_COLORS[lo], b = MOOD_COLORS[hi];
+  const mix = a.map((x, i) => Math.round(x + (b[i] - x) * t));
+  return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
+}
+/* палитра пункта: у продуктивности своя, у эмоциональной оценки — своя */
+function fieldColor(f, v) { return f.palette === 'mood' ? moodColor(v) : prodColor(v); }
 
 /* ---------- загрузка / API ----------
  * Два режима автоматически:
@@ -127,6 +170,20 @@ function prodColorAvg(v) {
 let backend = 'server';
 const LS_KEY = 'tracking_diary_v1';
 
+/* встроенные пункты, появившиеся позже сохранённого конфига, встают на своё место:
+ * эмоциональная оценка — сразу под продуктивностью, достижения — в конец списка. */
+function ensureBuiltinOrder() {
+  const ord = state.config.order;
+  let changed = false;
+  if (!ord.includes('mood')) {
+    const i = ord.indexOf('productivity');
+    if (i >= 0) ord.splice(i + 1, 0, 'mood'); else ord.push('mood');
+    changed = true;
+  }
+  if (!ord.includes('achievements')) { ord.push('achievements'); changed = true; }
+  return changed;
+}
+
 function normalizeState() {
   if (!state || typeof state !== 'object') state = {};
   if (!state.config) state.config = { fields: [], order: DEFAULT_ORDER.slice() };
@@ -135,14 +192,14 @@ function normalizeState() {
   if (!state.config.suppHidden) state.config.suppHidden = [];
   if (!state.config.order || !state.config.order.length) state.config.order = DEFAULT_ORDER.slice();
   if (!state.records) state.records = [];
+  return ensureBuiltinOrder();
 }
 
 async function loadData() {
   if (backend === 'local') {
     const raw = localStorage.getItem(LS_KEY);
     state = raw ? JSON.parse(raw) : { config: { fields: [], order: DEFAULT_ORDER.slice() }, records: [] };
-    normalizeState();
-    return;
+    return normalizeState();
   }
   try {
     const r = await fetch('api.php', { cache: 'no-store' });
@@ -156,7 +213,7 @@ async function loadData() {
     const raw = localStorage.getItem(LS_KEY);
     state = raw ? JSON.parse(raw) : { config: { fields: [], order: DEFAULT_ORDER.slice() }, records: [] };
   }
-  normalizeState();
+  return normalizeState();
 }
 
 /* применить действие локально (зеркало логики api.php) */
@@ -199,6 +256,8 @@ function resetCurrent() {
     if (f.type === 'group') {
       current[id] = {};
       for (const it of f.items) current[id][it.id] = null;
+    } else if (f.type === 'list') {
+      current[id] = [];
     } else {
       current[id] = null;
     }
@@ -242,6 +301,7 @@ function renderFieldCard(f) {
   if (f.type === 'group') buildGroup(ctrl, f);
   else if (f.type === 'bool') buildTri(ctrl, () => current[f.id], (v) => { current[f.id] = v; updateSaveBtn(); });
   else if (f.type === 'text') buildText(ctrl, f);
+  else if (f.type === 'list') buildList(ctrl, f);
   else buildInt(ctrl, f);
   card.appendChild(ctrl);
   return card;
@@ -256,18 +316,56 @@ function buildInt(ctrl, f) {
       b.type = 'button';
       b.className = 'val-btn';
       b.textContent = v;
+      if (f.id === 'sleep' && SLEEP_HINTS[v]) b.title = SLEEP_HINTS[v];
+      if (f.id === 'mood' && MOOD_HINTS[v]) b.title = MOOD_HINTS[v];
       const paint = () => {
         const on = current[f.id] === v;
         b.classList.toggle('active', on);
         if (f.colored) {
-          b.style.background = on ? prodColor(v) : '';
-          b.style.borderColor = on ? prodColor(v) : '';
-          b.style.color = on ? '#0b0b12' : '';
-          b.style.boxShadow = on ? `0 0 16px ${prodColor(v)}` : '';
+          const c = fieldColor(f, v);
+          // у эмоциональной оценки цвет виден и на невыбранных кнопках — это сама шкала
+          const tint = f.palette === 'mood';
+          b.style.background = on ? c : '';
+          b.style.borderColor = (on || tint) ? c : '';
+          b.style.color = on ? '#0b0b12' : (tint ? c : '');
+          b.style.boxShadow = on ? `0 0 16px ${c}` : '';
         }
       };
       b.addEventListener('click', () => {
         current[f.id] = (current[f.id] === v) ? null : v;  // повторный клик очищает
+        ctrl.querySelectorAll('.val-btn').forEach((el) => el._paint && el._paint());
+        updateSaveBtn();
+      });
+      b._paint = paint;
+      paint();
+      ctrl.appendChild(b);
+    }
+    // особая кнопка «S» для сна (после 5)
+    if (f.id === 'sleep') {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'val-btn sleep-s';
+      b.textContent = 'S';
+      b.title = SLEEP_HINTS.S;
+      const paint = () => b.classList.toggle('active', current[f.id] === 'S');
+      b.addEventListener('click', () => {
+        current[f.id] = (current[f.id] === 'S') ? null : 'S';
+        ctrl.querySelectorAll('.val-btn').forEach((el) => el._paint && el._paint());
+        updateSaveBtn();
+      });
+      b._paint = paint;
+      paint();
+      ctrl.appendChild(b);
+    }
+    // особая кнопка «S» для продуктивности (после 10) — ранг, учитывается как 12 баллов
+    if (f.id === 'productivity') {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'val-btn prod-s';
+      b.textContent = 'S';
+      const paint = () => b.classList.toggle('active', current[f.id] === 'S');
+      b.addEventListener('click', () => {
+        current[f.id] = (current[f.id] === 'S') ? null : 'S';
         ctrl.querySelectorAll('.val-btn').forEach((el) => el._paint && el._paint());
         updateSaveBtn();
       });
@@ -323,8 +421,94 @@ function buildText(ctrl, f) {
   const ta = document.createElement('textarea');
   ta.placeholder = 'пусто';
   ta.value = current[f.id] || '';
-  ta.addEventListener('input', () => { current[f.id] = ta.value || null; updateSaveBtn(); });
+  // Enter внутри поля — перенос строки, а не отправка формы; высота растёт под текст
+  const autoGrow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 420) + 'px'; };
+  ta.addEventListener('input', () => {
+    current[f.id] = ta.value || null;
+    autoGrow();
+    updateSaveBtn();
+  });
   ctrl.appendChild(ta);
+  requestAnimationFrame(autoGrow);          // после вставки в DOM — иначе scrollHeight = 0
+}
+
+/* список достижений: чипы с удалением + инлайн-добавление по кнопке «+ Достижение» */
+function buildList(ctrl, f) {
+  if (!Array.isArray(current[f.id])) current[f.id] = [];
+
+  const box = document.createElement('div');
+  box.className = 'ach-items';
+
+  const bar = document.createElement('div');
+  bar.className = 'ach-bar';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'ach-add';
+  addBtn.textContent = '+ Достижение';
+
+  const form = document.createElement('div');
+  form.className = 'ach-form hidden';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.placeholder = 'что удалось';
+  inp.maxLength = 200;
+  const okBtn = document.createElement('button');
+  okBtn.type = 'button'; okBtn.className = 'primary small'; okBtn.textContent = 'Добавить';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button'; cancelBtn.className = 'ghost small'; cancelBtn.textContent = 'Отмена';
+  form.appendChild(inp); form.appendChild(okBtn); form.appendChild(cancelBtn);
+
+  const paint = () => {
+    box.innerHTML = '';
+    const list = current[f.id];
+    if (!list.length) {
+      const em = document.createElement('span');
+      em.className = 'ach-empty';
+      em.textContent = 'пусто';
+      box.appendChild(em);
+      return;
+    }
+    list.forEach((text, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'ach-chip';
+      chip.innerHTML = `<span class="ach-star">★</span><span class="ach-text"></span><span class="ach-remove" title="Удалить достижение">×</span>`;
+      chip.querySelector('.ach-text').textContent = text;
+      chip.querySelector('.ach-remove').addEventListener('click', () => {
+        current[f.id].splice(i, 1);
+        paint();
+        updateSaveBtn();
+      });
+      box.appendChild(chip);
+    });
+  };
+
+  const closeForm = () => { form.classList.add('hidden'); inp.value = ''; };
+  const commit = () => {
+    const text = inp.value.trim();
+    if (!text) { closeForm(); return; }
+    current[f.id].push(text);
+    inp.value = '';
+    paint();
+    updateSaveBtn();
+    inp.focus();                            // сразу можно вводить следующее
+  };
+
+  addBtn.addEventListener('click', () => {
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) inp.focus();
+  });
+  okBtn.addEventListener('click', commit);
+  cancelBtn.addEventListener('click', closeForm);
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') closeForm();
+  });
+
+  bar.appendChild(addBtn);
+  paint();
+  ctrl.appendChild(box);
+  ctrl.appendChild(bar);
+  ctrl.appendChild(form);
 }
 
 /* tri-state: null(—) -> true(✓) -> false(✗) -> null */
@@ -558,7 +742,9 @@ function editRecord(r) {
   resetCurrent();                              // полный набор полей с пустыми значениями
   for (const k in r.values) {                  // наложить сохранённые значения
     const v = r.values[k];
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    if (Array.isArray(v)) {
+      current[k] = v.slice();                            // списки (достижения) — копией, не ссылкой
+    } else if (v !== null && typeof v === 'object') {
       current[k] = Object.assign(current[k] || {}, v);   // группы (добавки)
     } else {
       current[k] = v;
@@ -614,7 +800,9 @@ function renderHistory() {
 
 /* среднее по продуктивности */
 function avgProd(recs) {
-  const vals = recs.map((r) => r.values.productivity).filter((v) => v != null);
+  const vals = recs.map((r) => r.values.productivity)
+    .map((v) => (v === 'S' ? 12 : v))          // ранг S = 12 баллов
+    .filter((v) => typeof v === 'number');
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
@@ -624,12 +812,137 @@ function avgSteps(recs) {
   if (!vals.length) return null;
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
+/* средний балл сна (1..5; «S» считается как 6; пустые не в счёт) */
+function avgSleep(recs) {
+  const vals = recs.map((r) => r.values.sleep)
+    .map((v) => (v === 'S' ? 6 : v))
+    .filter((v) => typeof v === 'number');
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+/* средняя эмоциональная оценка (1..5; пустые не в счёт) */
+function avgMood(recs) {
+  const vals = recs.map((r) => r.values.mood).filter((v) => typeof v === 'number');
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+/* все достижения периода по возрастанию даты: [{date, text}] */
+function achievementStats(recs) {
+  const out = [];
+  const asc = recs.slice().sort((a, b) => a.date.localeCompare(b.date));
+  for (const r of asc) {
+    const list = r.values.achievements;
+    if (!Array.isArray(list)) continue;
+    for (const t of list) if (String(t).trim() !== '') out.push({ date: r.date, text: t });
+  }
+  return out;
+}
+/* короткая дата для строк достижений: «21 июн» */
+function fmtShortDate(iso) {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
+/* сколько раз каждая добавка принята за период (value === true), по убыванию */
+function supplementStats(recs) {
+  const counts = new Map();
+  for (const r of recs) {
+    const supp = r.values.supplements;
+    if (!supp || typeof supp !== 'object') continue;
+    for (const id in supp) {
+      if (supp[id] === true) counts.set(id, (counts.get(id) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, name: suppItemName(id), count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+/* цвет по частоте: зелёный (макс) -> красный (мин) */
+function countColor(count, min, max) {
+  if (max <= min) return 'hsl(120,70%,45%)';
+  const t = (count - min) / (max - min);
+  return `hsl(${Math.round(t * 120)},75%,45%)`;
+}
+
+/* воздержание за период: сумма максимумов каждой серии (всего дней воздержания).
+ * Серия заканчивается, когда число не выросло (стало <= предыдущего) — берём пик предыдущей. */
+function abstinenceStats(recs) {
+  const seq = recs.slice()
+    .sort((a, b) => a.date.localeCompare(b.date))   // по возрастанию даты
+    .map((r) => r.values.abstinence)
+    .filter((v) => v != null);
+  if (!seq.length) return null;
+  let total = 0, series = 0, prev = null;
+  for (const v of seq) {
+    if (prev !== null && v <= prev) { total += prev; series++; }  // серия оборвалась — добавить её пик
+    prev = v;
+  }
+  total += prev; series++;                          // последняя серия
+  return { total, series, avg: total / series };
+}
+
+/* блок сводки периода: достижения + добавки + средние */
+function renderPeriodSummary(container, recs) {
+  container.innerHTML = '';
+
+  // достижения периода — списком целиком, без разворачивания строки
+  const achs = achievementStats(recs);
+  if (achs.length) {
+    const b0 = document.createElement('div');
+    b0.className = 'summary-block summary-ach';
+    const lines = achs.map((a) =>
+      `<div class="ach-row"><span class="ach-star">★</span><span class="ach-date">${esc(fmtShortDate(a.date))}</span><span class="ach-text">${esc(a.text)}</span></div>`
+    ).join('');
+    b0.innerHTML = `<span class="summary-label">Достижения за период (${achs.length}):</span><div class="ach-rows">${lines}</div>`;
+    container.appendChild(b0);
+  }
+
+  const supps = supplementStats(recs);
+  const b1 = document.createElement('div');
+  b1.className = 'summary-block';
+  if (supps.length) {
+    const max = supps[0].count, min = supps[supps.length - 1].count;
+    const chips = supps.map((s) => {
+      const c = countColor(s.count, min, max);
+      return `<span class="supp-stat" style="border-color:${c};color:${c}">${esc(s.name)} <b>${s.count}</b></span>`;
+    }).join(' ');
+    b1.innerHTML = `<span class="summary-label">Добавки за период:</span><div class="supp-stats">${chips}</div>`;
+  } else {
+    b1.innerHTML = `<span class="summary-label">Добавки за период:</span> <span class="em">—</span>`;
+  }
+  container.appendChild(b1);
+
+  const sleep = avgSleep(recs);
+  const abs = abstinenceStats(recs);
+  const steps = avgSteps(recs);
+  const mood = avgMood(recs);
+  const stat = (label, val) => `<span class="summary-label">${label}</span> <b>${val}</b>`;
+  const moodStat = mood == null
+    ? stat('Эмоции в среднем:', '—')
+    : `<span class="summary-label">Эмоции в среднем:</span> <b style="color:${moodColorAvg(mood)}">${mood.toFixed(1)}</b>`;
+  const b2 = document.createElement('div');
+  b2.className = 'summary-block summary-averages';
+  b2.innerHTML = [
+    stat('Сон в среднем:', sleep == null ? '—' : sleep.toFixed(1)),
+    moodStat,
+    stat('Воздержание в среднем:', abs ? abs.avg.toFixed(1) : '—'),
+    stat('Шаги в среднем:', steps == null ? '—' : fmtNum(steps)),
+  ].join('<span class="sep">·</span>');
+  container.appendChild(b2);
+}
 
 function badgeProd(v) {
   const b = document.createElement('span');
   b.className = 'badge';
-  b.style.background = prodColor(v);
-  b.textContent = v;
+  if (v === 'S') {                              // ранг S — сияющий бейдж (стиль в CSS)
+    b.classList.add('prod-s');
+    b.textContent = 'S';
+  } else {
+    b.style.background = prodColor(v);
+    b.textContent = v;
+  }
   return b;
 }
 function badgeAvg(v) {
@@ -648,6 +961,23 @@ function renderDayRow(r) {
   const head = document.createElement('div');
   head.className = 'row-head';
   head.innerHTML = `<span class="caret">▶</span><span class="row-title">${esc(fmtDate(r.date))}</span>`;
+  const achCount = Array.isArray(r.values.achievements)
+    ? r.values.achievements.filter((t) => String(t).trim() !== '').length : 0;
+  if (achCount) {
+    const s = document.createElement('span');
+    s.className = 'row-ach';
+    s.title = `Достижений: ${achCount}`;
+    s.textContent = `★ ${achCount}`;
+    head.appendChild(s);
+  }
+  if (r.values.mood != null) {
+    const dot = document.createElement('span');
+    dot.className = 'mood-dot';
+    dot.title = `Эмоциональная оценка: ${r.values.mood}`;
+    dot.style.background = moodColor(r.values.mood);
+    dot.style.boxShadow = `0 0 10px ${moodColor(r.values.mood)}`;
+    head.appendChild(dot);
+  }
   head.appendChild(badgeProd(r.values.productivity));
   head.addEventListener('click', () => {
     row.classList.toggle('open');
@@ -670,6 +1000,8 @@ function renderDayDetail(r) {
     const f = map[id];
     const item = document.createElement('div');
     item.className = 'detail-item';
+    // многострочный текст и списки занимают всю ширину строки — под названием пункта
+    if (f.type === 'text' || f.type === 'list') item.classList.add('stacked');
     item.innerHTML = `<span class="k">${esc(f.name)}</span><span class="v">${formatValue(f, r.values[id])}</span>`;
     grid.appendChild(item);
   }
@@ -714,7 +1046,15 @@ function formatValue(f, val) {
     if (val === false) return '<span class="supp-line"><span class="no">✗ нет</span></span>';
     return '<span class="em">—</span>';
   }
-  if (val == null || val === '') return '<span style="color:#9a91b4">—</span>';
+  if (f.type === 'list') {
+    const list = Array.isArray(val) ? val.filter((t) => String(t).trim() !== '') : [];
+    if (!list.length) return '<span class="em">—</span>';
+    return `<span class="ach-view">${list.map((t) => `<span class="ach-chip view"><span class="ach-star">★</span><span class="ach-text">${esc(t)}</span></span>`).join('')}</span>`;
+  }
+  if (val == null || val === '') return '<span class="em">—</span>';
+  // текст выводим как есть — переносы строк сохраняются (white-space: pre-wrap в CSS)
+  if (f.type === 'text') return `<span class="text-block">${esc(val)}</span>`;
+  if (f.id === 'mood') return `<span class="mood-dot" style="background:${moodColor(val)};box-shadow:0 0 10px ${moodColor(val)}"></span><span class="mood-val">${esc(val)}</span>`;
   return esc(val);
 }
 
@@ -762,6 +1102,12 @@ function makeGroupRow(title, sub, recs, expand) {
   head.appendChild(badgeAvg(avg));
   row.appendChild(head);
 
+  // сводка периода — видна сразу, без разворачивания
+  const summary = document.createElement('div');
+  summary.className = 'period-summary';
+  renderPeriodSummary(summary, recs);
+  row.appendChild(summary);
+
   const bodyEl = document.createElement('div');
   bodyEl.className = 'row-body';
   const nested = document.createElement('div');
@@ -783,8 +1129,9 @@ function renderWeeks(body, recs) {
   for (const k of keys) {
     const list = weeks.get(k).slice().sort((a, b) => b.date.localeCompare(a.date));
     const w = k.split('-W');
-    const sub = `${weekRange(list[0].date)} · дней: ${list.length}${avgSteps(list) != null ? ` · шаги⌀ ${avgSteps(list)}` : ''}`;
-    body.appendChild(makeGroupRow(`Неделя ${Number(w[1])}, ${w[0]}`, sub, list, (nested) => {
+    const title = weekRange(list[0].date);                      // диапазон дней — слева
+    const sub = `Неделя ${Number(w[1])}, ${w[0]} · дней: ${list.length}`;
+    body.appendChild(makeGroupRow(title, sub, list, (nested) => {
       list.forEach((r) => nested.appendChild(renderDayRow(r)));
     }));
   }
@@ -796,7 +1143,7 @@ function renderMonths(body, recs) {
   for (const k of keys) {
     const list = months.get(k).slice().sort((a, b) => b.date.localeCompare(a.date));
     const [y, m] = k.split('-').map(Number);
-    const sub = `дней: ${list.length}${avgSteps(list) != null ? ` · шаги⌀ ${avgSteps(list)}` : ''}`;
+    const sub = `дней: ${list.length}`;
     body.appendChild(makeGroupRow(`${MONTHS_FULL[m - 1]} ${y}`, sub, list, (nested) => {
       // месяц -> недели -> дни
       const weeks = groupBy(list, weekKey);
@@ -804,8 +1151,9 @@ function renderMonths(body, recs) {
       for (const wk of wkeys) {
         const wlist = weeks.get(wk).slice().sort((a, b) => b.date.localeCompare(a.date));
         const w = wk.split('-W');
-        const wsub = `${weekRange(wlist[0].date)} · дней: ${wlist.length}`;
-        nested.appendChild(makeGroupRow(`Неделя ${Number(w[1])}`, wsub, wlist, (n2) => {
+        const wtitle = weekRange(wlist[0].date);                 // диапазон дней — слева
+        const wsub = `Неделя ${Number(w[1])} · дней: ${wlist.length}`;
+        nested.appendChild(makeGroupRow(wtitle, wsub, wlist, (n2) => {
           wlist.forEach((r) => n2.appendChild(renderDayRow(r)));
         }));
       }
@@ -844,141 +1192,10 @@ function setupModal() {
   });
 }
 
-/* ================= ФОН ПО СЕЗОНУ + ПОГОДЕ ================= */
-/* цвет центра градиента по месяцам (RGB), между месяцами плавно перетекает по дням */
-const MONTH_CENTER = [
-  [30, 74, 122],   // янв — голубоватый
-  [30, 78, 122],   // фев — голубоватый
-  [28, 90, 112],   // мар — голубо-бирюзовый
-  [28, 98, 88],    // апр — бирюзово-зелёный
-  [54, 118, 62],   // май — светло-зелёный
-  [34, 106, 42],   // июн — зелёный
-  [32, 102, 40],   // июл — зелёный
-  [40, 98, 36],    // авг — зелёный
-  [80, 100, 34],   // сен — жёлто-зелёный
-  [124, 82, 26],   // окт — янтарный
-  [144, 70, 20],   // ноя — оранжевый
-  [30, 74, 122],   // дек — голубоватый
-];
-const lerp = (a, b, t) => Math.round(a + (b - a) * t);
-
-function seasonCenter() {
-  const now = new Date();
-  const m = now.getMonth();
-  const day = now.getDate();
-  const dim = new Date(now.getFullYear(), m + 1, 0).getDate();
-  const t = (day - 1) / dim;
-  const c1 = MONTH_CENTER[m];
-  const c2 = MONTH_CENTER[(m + 1) % 12];
-  return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
-}
-
-function applySeasonColor() {
-  const [r, g, b] = seasonCenter();
-  const mid = [Math.round(r * 0.42), Math.round(g * 0.42), Math.round(b * 0.42)];
-  const gl = [Math.round(r + (255 - r) * 0.4), Math.round(g + (255 - g) * 0.4), Math.round(b + (255 - b) * 0.4)];
-  const root = document.documentElement.style;
-  root.setProperty('--season-center', `rgb(${r},${g},${b})`);
-  root.setProperty('--season-mid', `rgb(${mid[0]},${mid[1]},${mid[2]})`);
-  root.setProperty('--season-glow', `rgba(${gl[0]},${gl[1]},${gl[2]},.42)`);
-}
-
-/* погода в Кирове через Open-Meteo (без ключа, можно прямо из браузера) */
-async function fetchWeatherCode() {
-  try {
-    const url = 'https://api.open-meteo.com/v1/forecast?latitude=58.6035&longitude=49.6679&current=weather_code&timezone=auto';
-    const r = await fetch(url);
-    const d = await r.json();
-    return d && d.current ? d.current.weather_code : null;
-  } catch (e) {
-    console.info('Погода недоступна — частицы по сезону.', e);
-    return null;
-  }
-}
-
-/* код погоды WMO + сезон -> тип частиц */
-function weatherToParticles(code, month) {
-  const snow = [71, 73, 75, 77, 85, 86];
-  const rain = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99];
-  if (snow.includes(code)) return 'snow';
-  if (rain.includes(code)) return 'rain';
-  if ([8, 9, 10].includes(month)) return 'leaf';   // сен/окт/ноя — листопад (в API его нет, ведём по сезону)
-  return null;
-}
-
-let fxLeft = null, fxRight = null;
-function ensureFxLayers() {
-  if (fxLeft) return;
-  fxLeft = document.createElement('div'); fxLeft.className = 'fx-layer fx-left';
-  fxRight = document.createElement('div'); fxRight.className = 'fx-layer fx-right';
-  document.body.appendChild(fxLeft);
-  document.body.appendChild(fxRight);
-}
-const rnd = (a, b) => a + Math.random() * (b - a);
-
-function makeParticle(type, layer) {
-  const p = document.createElement('div');
-  p.className = 'particle ' + type;
-  let dur;
-  if (type === 'rain') dur = rnd(0.6, 1.2);
-  else if (type === 'snow') dur = rnd(6, 12);
-  else dur = rnd(6, 11);                     // leaf
-  p.style.left = rnd(0, 100) + '%';
-  p.style.animationDuration = dur.toFixed(2) + 's';
-  p.style.animationDelay = (-rnd(0, dur)).toFixed(2) + 's';   // отрицательная — стартуют вразнобой
-  p.style.setProperty('--sway', rnd(-18, 18).toFixed(0) + 'px');
-  if (type === 'snow') { const s = rnd(4, 9); p.style.width = p.style.height = s.toFixed(1) + 'px'; }
-  if (type === 'rain') p.style.height = rnd(10, 20).toFixed(0) + 'px';
-  if (type === 'leaf') { p.textContent = Math.random() < 0.5 ? '🍁' : '🍂'; p.style.fontSize = rnd(14, 24).toFixed(0) + 'px'; }
-  layer.appendChild(p);
-}
-
-function spawnParticles(type) {
-  ensureFxLayers();
-  fxLeft.innerHTML = '';
-  fxRight.innerHTML = '';
-  if (!type) return;
-  const perSide = type === 'rain' ? 22 : 14;
-  for (const layer of [fxLeft, fxRight]) {
-    for (let i = 0; i < perSide; i++) makeParticle(type, layer);
-  }
-}
-
-let fxOverride = null;   // ВРЕМЕННЫЙ ТЕСТ: null = авто(погода), иначе 'snow'/'rain'/'leaf'/'off'
-async function applyAmbient() {
-  applySeasonColor();
-  if (fxOverride !== null) { spawnParticles(fxOverride === 'off' ? null : fxOverride); return; }
-  const code = await fetchWeatherCode();
-  spawnParticles(weatherToParticles(code, new Date().getMonth()));
-}
-
-/* ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ ЧАСТИЦ — удалить этот блок и вызов setupFxTest() позже */
-function setupFxTest() {
-  const panel = document.createElement('div');
-  panel.className = 'fx-test';
-  panel.innerHTML = '<span class="lbl">тест частиц:</span>';
-  const opts = [['авто', null], ['❄ снег', 'snow'], ['💧 дождь', 'rain'], ['🍂 листья', 'leaf'], ['выкл', 'off']];
-  const btns = [];
-  for (const [label, val] of opts) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.addEventListener('click', () => {
-      fxOverride = val;
-      btns.forEach((x) => x.classList.toggle('active', x === b));
-      if (val === null) applyAmbient();
-      else spawnParticles(val === 'off' ? null : val);
-    });
-    btns.push(b);
-    panel.appendChild(b);
-  }
-  btns[0].classList.add('active');
-  document.body.appendChild(panel);
-}
-
 /* ================= СТАРТ ================= */
 async function init() {
-  await loadData();
+  const orderChanged = await loadData();
+  if (orderChanged) await saveConfig();     // новые встроенные пункты закрепились в конфиге
   resetCurrent();
   $('#recDate').value = todayLocal();
   $('#recDate').addEventListener('change', updateSaveBtn);
@@ -990,8 +1207,5 @@ async function init() {
   setupModal();
   renderForm();
   renderHistory();
-  applyAmbient();
-  setInterval(applyAmbient, 30 * 60 * 1000);   // обновлять погоду раз в 30 минут
-  setupFxTest();   // ВРЕМЕННЫЙ ТЕСТ-ПЕРЕКЛЮЧАТЕЛЬ — удалить позже
 }
 init();
