@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Поле зрения</title>
+    <style>
+        /* ─── Reset & base ─── */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            min-height: 100vh;
+            background: radial-gradient(ellipse at center, #0b0e1a 0%, #03040a 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        /* ─── Game container ─── */
+        #game {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ─── Header ─── */
+        #header {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            padding: 0 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            z-index: 10;
+            flex-wrap: wrap;
+        }
+
+        #header .stat {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(6px);
+            padding: 8px 22px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #header .stat .label {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #header .stat .value {
+            color: #fff;
+            font-weight: 700;
+            font-size: 18px;
+            min-width: 30px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        #header .stat .value.level {
+            color: #6fc3ff;
+            text-shadow: 0 0 20px rgba(111, 195, 255, 0.3);
+        }
+
+        #header .stat .value.dist {
+            color: #ffd866;
+            text-shadow: 0 0 20px rgba(255, 216, 102, 0.2);
+        }
+
+        #header .stat .value.score {
+            color: #7dffb3;
+            text-shadow: 0 0 20px rgba(125, 255, 179, 0.2);
+        }
+
+        #header .stat .value.streak {
+            color: #ff9a9e;
+            text-shadow: 0 0 20px rgba(255, 154, 158, 0.2);
+        }
+
+        /* ─── Game area ─── */
+        #game-area {
+            position: relative;
+            width: 100%;
+            height: 60%;
+            min-height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ─── Center dot ─── */
+        #center-dot {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 18px;
+            height: 18px;
+            background: #6fc3ff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow:
+                0 0 30px rgba(111, 195, 255, 0.6),
+                0 0 60px rgba(111, 195, 255, 0.2),
+                inset 0 0 10px rgba(255, 255, 255, 0.3);
+            z-index: 5;
+            transition: box-shadow 0.3s;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                box-shadow: 0 0 30px rgba(111, 195, 255, 0.6), 0 0 60px rgba(111, 195, 255, 0.2);
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.15);
+                box-shadow: 0 0 50px rgba(111, 195, 255, 0.8), 0 0 100px rgba(111, 195, 255, 0.3);
+            }
+        }
+
+        /* ─── Crosshair rings ─── */
+        #crosshair {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #crosshair .ring {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* ─── Words (теперь без цветовых подсказок) ─── */
+        .word {
+            position: absolute;
+            top: 50%;
+            font-size: 52px;
+            font-weight: 700;
+            color: #ffffff; /* все буквы одного цвета */
+            text-shadow:
+                0 0 40px rgba(255, 255, 255, 0.08),
+                0 4px 30px rgba(0, 0, 0, 0.5);
+            transform: translate(-50%, -50%);
+            transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+                opacity 0.3s ease;
+            z-index: 4;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            will-change: left;
+            padding: 0 10px;
+        }
+
+        .word.left {
+            left: calc(50% - var(--dist));
+            text-align: right;
+            transform: translate(0%, -50%);
+        }
+
+        .word.right {
+            left: calc(50% + var(--dist));
+            text-align: left;
+            transform: translate(-100%, -50%);
+        }
+
+        /* ─── Distance line ─── */
+        #distance-line {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            height: 2px;
+            background: linear-gradient(to right,
+                    transparent,
+                    rgba(255, 255, 255, 0.05) 10%,
+                    rgba(255, 255, 255, 0.08) 50%,
+                    rgba(255, 255, 255, 0.05) 90%,
+                    transparent);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 0;
+            transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            width: calc(var(--dist) * 2 + 80px);
+            min-width: 100px;
+            border-radius: 2px;
+        }
+
+        #distance-line::before,
+        #distance-line::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 4px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            transform: translateY(-50%);
+        }
+
+        #distance-line::before {
+            left: 30px;
+        }
+        #distance-line::after {
+            right: 30px;
+        }
+
+        /* ─── Feedback overlay ─── */
+        #feedback {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            font-size: 72px;
+            font-weight: 800;
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0;
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-shadow: 0 0 80px rgba(0, 0, 0, 0.6);
+        }
+
+        #feedback.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #feedback.correct {
+            color: #7dffb3;
+        }
+
+        #feedback.wrong {
+            color: #ff6b6b;
+        }
+
+        /* ─── Instructions ─── */
+        #instructions {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            z-index: 10;
+            padding: 0 20px;
+        }
+
+        #instructions .key {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 10px 22px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
+        }
+
+        #instructions .key .arrow {
+            font-size: 22px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        #instructions .key .action {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        #instructions .key .action.same {
+            color: #7dffb3;
+        }
+
+        #instructions .key .action.diff {
+            color: #ff9a9e;
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 768px) {
+            .word {
+                font-size: 32px;
+            }
+
+            #header {
+                gap: 16px;
+                top: 16px;
+            }
+
+            #header .stat {
+                padding: 4px 14px;
+                font-size: 13px;
+            }
+
+            #header .stat .value {
+                font-size: 15px;
+                min-width: 20px;
+            }
+
+            #instructions {
+                bottom: 20px;
+                gap: 20px;
+                font-size: 12px;
+            }
+
+            #instructions .key {
+                padding: 6px 14px;
+            }
+
+            #instructions .key .arrow {
+                font-size: 18px;
+            }
+
+            #feedback {
+                font-size: 48px;
+            }
+
+            #center-dot {
+                width: 14px;
+                height: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .word {
+                font-size: 24px;
+            }
+
+            #header .stat .label {
+                font-size: 10px;
+            }
+
+            #header .stat .value {
+                font-size: 13px;
+            }
+
+            #instructions .key .action {
+                font-size: 10px;
+            }
+        }
+
+        /* ─── Flash animation for correct/incorrect ─── */
+        #game.flash-correct {
+            animation: flash-green 0.3s ease;
+        }
+
+        #game.flash-wrong {
+            animation: flash-red 0.3s ease;
+        }
+
+        @keyframes flash-green {
+            0% {
+                background: radial-gradient(ellipse at center, rgba(125, 255, 179, 0.12) 0%, transparent 70%);
+            }
+            100% {
+                background: radial-gradient(ellipse at center, transparent 0%, transparent 100%);
+            }
+        }
+
+        @keyframes flash-red {
+            0% {
+                background: radial-gradient(ellipse at center, rgba(255, 107, 107, 0.15) 0%, transparent 70%);
+            }
+            100% {
+                background: radial-gradient(ellipse at center, transparent 0%, transparent 100%);
+            }
+        }
+
+        /* ─── Progress bar ─── */
+        #progress-container {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 3;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+
+        #progress-container:hover {
+            opacity: 1;
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 50%;
+            background: linear-gradient(to right, #6fc3ff, #ffd866);
+            border-radius: 4px;
+            transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* ─── Extra: subtle particle glow ─── */
+        #glow-bg {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 80vmin;
+            height: 80vmin;
+            background: radial-gradient(circle at center, rgba(111, 195, 255, 0.03) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            transition: all 0.8s ease;
+        }
+
+        /* ─── Level badge ─── */
+        #level-badge {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: 900;
+            color: rgba(255, 255, 255, 0.015);
+            pointer-events: none;
+            z-index: 0;
+            letter-spacing: 4px;
+            white-space: nowrap;
+            transition: all 0.8s ease;
+        }
+
+        @media (max-width: 768px) {
+            #level-badge {
+                font-size: 60px;
+            }
+            #progress-container {
+                bottom: 70px;
+                width: 140px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game">
+        <!-- Background glow -->
+        <div id="glow-bg"></div>
+
+        <!-- Level badge (subtle background) -->
+        <div id="level-badge">✦</div>
+
+        <!-- Header -->
+        <div id="header">
+            <div class="stat">
+                <span class="label">Уровень</span>
+                <span class="value level" id="levelDisplay">1</span>
+            </div>
+            <div class="stat">
+                <span class="label">Дистанция</span>
+                <span class="value dist" id="distDisplay">150</span>
+                <span style="font-size:12px;color:rgba(255,255,255,0.2);">px</span>
+            </div>
+            <div class="stat">
+                <span class="label">Счёт</span>
+                <span class="value score" id="scoreDisplay">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">Серия</span>
+                <span class="value streak" id="streakDisplay">0</span>
+            </div>
+        </div>
+
+        <!-- Game area -->
+        <div id="game-area">
+            <!-- Distance line -->
+            <div id="distance-line" style="--dist:150px;"></div>
+
+            <!-- Crosshair rings -->
+            <div id="crosshair">
+                <div class="ring" style="width:60px;height:60px;border-color:rgba(255,255,255,0.03);"></div>
+                <div class="ring" style="width:120px;height:120px;border-color:rgba(255,255,255,0.02);"></div>
+                <div class="ring" style="width:200px;height:200px;border-color:rgba(255,255,255,0.015);"></div>
+                <div class="ring" style="width:300px;height:300px;border-color:rgba(255,255,255,0.01);"></div>
+            </div>
+
+            <!-- Words (без цветовых подсказок) -->
+            <div id="left-word" class="word left" style="--dist:150px;"></div>
+            <div id="right-word" class="word right" style="--dist:150px;"></div>
+
+            <!-- Center dot -->
+            <div id="center-dot"></div>
+
+            <!-- Feedback -->
+            <div id="feedback"></div>
+
+            <!-- Progress -->
+            <div id="progress-container">
+                <div id="progress-bar" style="width:50%;"></div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div id="instructions">
+            <div class="key">
+                <span class="arrow">↑</span>
+                <span class="action same">Одинаковые</span>
+            </div>
+            <div class="key">
+                <span class="arrow">↓</span>
+                <span class="action diff">Отличаются</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  WORD LIST
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const WORD_POOL = [
+            'apple', 'happy', 'smile', 'heart', 'light', 'dream', 'peace', 'brave',
+            'clear', 'sweet', 'green', 'brown', 'stone', 'water', 'fire', 'cloud',
+            'storm', 'night', 'star', 'moon', 'bird', 'tree', 'flower', 'river',
+            'ocean', 'forest', 'garden', 'winter', 'summer', 'spring', 'autumn',
+            'golden', 'silver', 'crystal', 'diamond', 'emerald', 'ruby', 'pearl',
+            'amber', 'jade', 'coral', 'ivory', 'ebony', 'rose', 'lily', 'daisy',
+            'tulip', 'maple', 'pine', 'oak', 'willow', 'ash', 'raven', 'eagle',
+            'hawk', 'dove', 'swan', 'owl', 'falcon', 'sparrow', 'robin', 'wren',
+            'gentle', 'robust', 'sunny', 'rainy', 'snowy', 'windy', 'calm', 'stormy',
+            'warm', 'cool', 'hot', 'cold', 'bright', 'shiny', 'glow', 'sparkle',
+            'twinkle', 'shine', 'glitter', 'glisten', 'radiant', 'luminous', 'vivid',
+            'crisp', 'fresh', 'mellow', 'silky', 'velvet', 'satin', 'glossy', 'matte'
+        ];
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  GAME STATE
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const state = {
+            distance: 150, // px from center to each word
+            minDist: 30,
+            maxDist: 480,
+            step: 12, // change per correct/wrong
+
+            score: 0,
+            streak: 0,
+            maxStreak: 0,
+
+            level: 1,
+
+            // current pair
+            leftWord: '',
+            rightWord: '',
+            isSame: true, // true = identical, false = differ by one letter
+            diffIndex: -1, // which letter is different (if !isSame)
+
+            // feedback
+            isWaiting: false,
+            timer: null,
+
+            totalRounds: 0,
+            correctRounds: 0,
+        };
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  DOM REFS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const leftEl = document.getElementById('left-word');
+        const rightEl = document.getElementById('right-word');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const distDisplay = document.getElementById('distDisplay');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const streakDisplay = document.getElementById('streakDisplay');
+        const feedbackEl = document.getElementById('feedback');
+        const gameEl = document.getElementById('game');
+        const progressBar = document.getElementById('progress-bar');
+        const distLine = document.getElementById('distance-line');
+        const levelBadge = document.getElementById('level-badge');
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  HELPERS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        function randomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function pickRandom(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function clamp(v, min, max) {
+            return Math.max(min, Math.min(max, v));
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  WORD GENERATION
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        function generateWordPair() {
+            const base = pickRandom(WORD_POOL);
+            // 50% chance same / different
+            const same = Math.random() < 0.5;
+
+            if (same) {
+                return {
+                    left: base,
+                    right: base,
+                    isSame: true,
+                    diffIndex: -1,
+                };
+            }
+
+            // Different: change one letter
+            const len = base.length;
+            const pos = randomInt(0, len - 1);
+            let newWord = base.split('');
+
+            // pick a new letter different from the original
+            let newChar;
+            let attempts = 0;
+            do {
+                newChar = String.fromCharCode(randomInt(97, 122)); // a-z
+                attempts++;
+            } while ((newChar === base[pos] || newChar === newWord[pos]) && attempts < 30);
+
+            newWord[pos] = newChar;
+            const right = newWord.join('');
+
+            // Make sure it's actually different
+            if (right === base) {
+                // fallback: change a different position
+                const pos2 = (pos + 1) % len;
+                let c2;
+                let att2 = 0;
+                do {
+                    c2 = String.fromCharCode(randomInt(97, 122));
+                    att2++;
+                } while ((c2 === base[pos2] || c2 === newWord[pos2]) && att2 < 30);
+                newWord[pos2] = c2;
+                const right2 = newWord.join('');
+                if (right2 !== base) {
+                    return {
+                        left: base,
+                        right: right2,
+                        isSame: false,
+                        diffIndex: pos2,
+                    };
+                }
+                // ultimate fallback: use a completely different word
+                let alt = pickRandom(WORD_POOL);
+                while (alt === base) alt = pickRandom(WORD_POOL);
+                return {
+                    left: base,
+                    right: alt,
+                    isSame: false,
+                    diffIndex: 0,
+                };
+            }
+
+            return {
+                left: base,
+                right: right,
+                isSame: false,
+                diffIndex: pos,
+            };
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  RENDER (без цветовых выделений)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        function renderWords(pair) {
+            const { left, right } = pair;
+
+            // Просто выводим слова без обёрток и классов — все буквы одного цвета
+            leftEl.textContent = left;
+            rightEl.textContent = right;
+
+            // Update CSS custom properties for distance
+            const dist = state.distance;
+            leftEl.style.setProperty('--dist', dist + 'px');
+            rightEl.style.setProperty('--dist', dist + 'px');
+            distLine.style.setProperty('--dist', dist + 'px');
+
+            // Update progress bar
+            const pct = ((dist - state.minDist) / (state.maxDist - state.minDist)) * 100;
+            progressBar.style.width = clamp(pct, 0, 100) + '%';
+
+            // Update level badge
+            const lvl = getLevel(dist);
+            levelBadge.textContent = `✦ ${lvl}`;
+            levelBadge.style.fontSize = (window.innerWidth < 768) ? '60px' : '120px';
+        }
+
+        function getLevel(dist) {
+            // level scales with distance: higher distance = higher level
+            const range = state.maxDist - state.minDist;
+            const normalized = (dist - state.minDist) / range; // 0..1
+            return Math.max(1, Math.round(normalized * 20) + 1);
+        }
+
+        function updateUI() {
+            const lvl = getLevel(state.distance);
+            state.level = lvl;
+            levelDisplay.textContent = lvl;
+            distDisplay.textContent = Math.round(state.distance);
+            scoreDisplay.textContent = state.score;
+            streakDisplay.textContent = state.streak;
+
+            // Update distance line width
+            const lineWidth = state.distance * 2 + 80;
+            distLine.style.width = Math.min(lineWidth, window.innerWidth - 40) + 'px';
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  GAME LOGIC
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        let currentPair = null;
+
+        function newRound() {
+            const pair = generateWordPair();
+            currentPair = pair;
+            renderWords(pair);
+            updateUI();
+            state.isWaiting = false;
+            feedbackEl.classList.remove('show', 'correct', 'wrong');
+            gameEl.classList.remove('flash-correct', 'flash-wrong');
+        }
+
+        function handleAnswer(userSaysSame) {
+            if (state.isWaiting || !currentPair) return;
+            state.isWaiting = true;
+
+            const correct = (userSaysSame === currentPair.isSame);
+            state.totalRounds++;
+
+            if (correct) {
+                state.correctRounds++;
+                state.score++;
+                state.streak++;
+                if (state.streak > state.maxStreak) state.maxStreak = state.streak;
+
+                // Increase distance
+                state.distance = clamp(state.distance + state.step, state.minDist, state.maxDist);
+
+                // Feedback
+                showFeedback(true);
+                gameEl.classList.add('flash-correct');
+                setTimeout(() => gameEl.classList.remove('flash-correct'), 400);
+
+            } else {
+                state.streak = 0;
+
+                // Decrease distance
+                state.distance = clamp(state.distance - state.step, state.minDist, state.maxDist);
+
+                showFeedback(false);
+                gameEl.classList.add('flash-wrong');
+                setTimeout(() => gameEl.classList.remove('flash-wrong'), 400);
+            }
+
+            // Update UI immediately
+            updateUI();
+
+            // Schedule next round
+            if (state.timer) clearTimeout(state.timer);
+            state.timer = setTimeout(() => {
+                newRound();
+                state.timer = null;
+            }, correct ? 500 : 700);
+        }
+
+        function showFeedback(correct) {
+            feedbackEl.textContent = correct ? '✓' : '✗';
+            feedbackEl.className = 'show ' + (correct ? 'correct' : 'wrong');
+            // reset animation
+            feedbackEl.style.animation = 'none';
+            requestAnimationFrame(() => {
+                feedbackEl.style.animation = '';
+            });
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  KEYBOARD
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                handleAnswer(true);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                handleAnswer(false);
+            } else if (e.key === 'r' || e.key === 'R') {
+                // Reset (secret)
+                resetGame();
+            }
+        });
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  MOBILE TOUCH / CLICK (optional support)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Click on left side = same, right side = different
+        document.addEventListener('click', (e) => {
+            const x = e.clientX;
+            const w = window.innerWidth;
+            if (x < w * 0.35) {
+                handleAnswer(true);
+            } else if (x > w * 0.65) {
+                handleAnswer(false);
+            }
+        });
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  RESET
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        function resetGame() {
+            if (state.timer) {
+                clearTimeout(state.timer);
+                state.timer = null;
+            }
+            state.distance = 150;
+            state.score = 0;
+            state.streak = 0;
+            state.maxStreak = 0;
+            state.totalRounds = 0;
+            state.correctRounds = 0;
+            state.isWaiting = false;
+            feedbackEl.classList.remove('show', 'correct', 'wrong');
+            gameEl.classList.remove('flash-correct', 'flash-wrong');
+            newRound();
+            updateUI();
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  WINDOW RESIZE
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                // update line width
+                const lineWidth = state.distance * 2 + 80;
+                distLine.style.width = Math.min(lineWidth, window.innerWidth - 40) + 'px';
+                // update level badge font
+                const lvl = getLevel(state.distance);
+                levelBadge.textContent = `✦ ${lvl}`;
+                levelBadge.style.fontSize = (window.innerWidth < 768) ? '60px' : '120px';
+            }, 100);
+        });
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  INIT
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Set initial distance line width
+        const initLineWidth = state.distance * 2 + 80;
+        distLine.style.width = Math.min(initLineWidth, window.innerWidth - 40) + 'px';
+
+        newRound();
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  PREVENT SCROLLING WITH ARROWS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  TOUCH SUPPORT for mobile (tap left/right)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+        }, { passive: true });
+
+        document.addEventListener('touchend', (e) => {
+            const x = touchStartX;
+            const w = window.innerWidth;
+            if (x < w * 0.35) {
+                handleAnswer(true);
+            } else if (x > w * 0.65) {
+                handleAnswer(false);
+            }
+        }, { passive: true });
+
+        console.log('✅ Готово! Нажми ↑ (одинаковые) или ↓ (отличаются) — без цветовых подсказок!');
+    </script>
+
+</body>
+</html>
