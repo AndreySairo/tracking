@@ -71,6 +71,11 @@ $buf = New-Object System.Collections.Generic.List[byte]
 $idleLimit = 8
 $lastByteAt = Get-Date
 
+# Учёт качества радиоканала. Исправная связь даёт около 4096 байт в секунду
+# (512 отсчётов по 8 байт). Заметно меньше - помехи или слабый сигнал.
+$rateBytes = 0
+$rateSince = Get-Date
+
 try {
     while ($true) {
         $n = $sp.BytesToRead
@@ -87,6 +92,14 @@ try {
         $tmp = New-Object byte[] $n
         [void]$sp.Read($tmp, 0, $n)
         $buf.AddRange($tmp)
+
+        $rateBytes += $n
+        $elapsed = ((Get-Date) - $rateSince).TotalSeconds
+        if ($elapsed -ge 3) {
+            Emit @{ quality = [math]::Round(($rateBytes / $elapsed) / 4096 * 100) }
+            $rateBytes = 0
+            $rateSince = Get-Date
+        }
 
         # выбираем из буфера все целые пакеты: AA AA <длина> <тело> <контрольная сумма>
         while ($buf.Count -ge 4) {

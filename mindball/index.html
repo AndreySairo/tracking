@@ -74,6 +74,8 @@
       <div class="value" id="cal">—</div><div class="label" id="calText">&nbsp;</div></div>
     <div class="card"><div class="label">Качество контакта</div>
       <div class="value" id="sig">—</div><div class="label" id="sigText">&nbsp;</div></div>
+    <div class="card"><div class="label">Радиоканал</div>
+      <div class="value" id="q">—</div><div class="label" id="qText">&nbsp;</div></div>
     <div class="card"><div class="label">Пакетов принято</div>
       <div class="value" id="pk">0</div><div class="label">&nbsp;</div></div>
   </div>
@@ -232,6 +234,14 @@ function paintPanel() {
   document.getElementById('medBar').style.width = (live ? sMed : 0) + '%';
   document.getElementById('sig').textContent = data.packets ? data.poorSignal : '—';
   document.getElementById('pk').textContent = data.packets;
+
+  const q = document.getElementById('q'), qT = document.getElementById('qText');
+  if (typeof data.quality === 'number') {
+    q.textContent = data.quality + '%';
+    qT.textContent = data.quality >= 90 ? 'связь чистая'
+                   : data.quality >= 70 ? 'есть потери'
+                   : 'сильные помехи, ждите обрывов';
+  } else { q.textContent = '—'; qT.textContent = 'нет данных'; }
   document.getElementById('cal').textContent = cal.lo + '–' + cal.hi;
   document.getElementById('calText').textContent = cal.source;
 

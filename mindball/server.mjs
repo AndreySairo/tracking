@@ -6,7 +6,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +24,7 @@ const state = {
   packets: 0,
   warmup: true,         // первые ~10 с гарнитура не выдаёт показатели
   stale: false,         // данные перестали приходить: связь потеряна
+  quality: null,        // качество радиоканала, % от исправного потока
   updated: 0,
 };
 
@@ -44,12 +45,30 @@ function log(msg) {
 
 let reader = null;
 
+// Снимаем читалки, оставшиеся от прошлых запусков: они держат COM-порт
+// и новая читалка его не получит. Осиротевшие процессы переживают падение сервера.
+function killStrayReaders() {
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-Command',
+      "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | " +
+      "Where-Object { $_.CommandLine -like '*com-reader.ps1*' -and $_.ProcessId -ne $PID } | " +
+      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+    ], { timeout: 10000, stdio: 'ignore' });
+  } catch { /* нечего снимать или снять не удалось - не мешает работе */ }
+}
+
+let starting = false;
+
 function startReader() {
+  if (starting) return;             // защита от параллельных запусков
+  starting = true;
+  killStrayReaders();
   reader = spawn('powershell.exe', [
     '-ExecutionPolicy', 'Bypass', '-NoProfile',
     '-File', path.join(DIR, 'com-reader.ps1'),
     '-Port', COM_PORT,
   ], { windowsHide: true });
+  starting = false;
 
   let buf = '';
   reader.stdout.setEncoding('utf8');
@@ -67,6 +86,13 @@ function startReader() {
         state.link = o.error;
         state.portBusy = /дост|занят|denied/i.test(o.error);
         log(state.link);
+        broadcast();
+        continue;
+      }
+      if (typeof o.quality === 'number') {
+        state.quality = o.quality;
+        state.updated = Date.now();
+        state.stale = false;
         broadcast();
         continue;
       }
@@ -190,4 +216,10 @@ server.listen(HTTP_PORT, '127.0.0.1', () => {
   startReader();
 });
 
-process.on('SIGINT', () => { if (reader) reader.kill(); process.exit(0); });
+function shutdown() {
+  if (reader) reader.kill();
+  killStrayReaders();
+  process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
