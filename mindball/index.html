@@ -204,7 +204,7 @@ const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
 let lastSecond = 0;
 
 function onData() {
-  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup && !data.stale;
   if (live) {
     sAtt = ema(sAtt, data.attention, 0.25);
     sMed = ema(sMed, data.meditation, 0.25);
@@ -225,7 +225,7 @@ function onData() {
 }
 
 function paintPanel() {
-  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup && !data.stale;
   document.getElementById('att').textContent = live ? Math.round(sAtt) : '—';
   document.getElementById('med').textContent = live ? Math.round(sMed) : '—';
   document.getElementById('attBar').style.width = (live ? sAtt : 0) + '%';
@@ -243,6 +243,12 @@ function paintPanel() {
       ? 'COM-порт занят. Закройте ThinkGear Connector и программы NeuroSky. (' + data.link + ')'
       : 'Данных нет. ' + (data.link || '') + ' Проверьте, включена ли гарнитура.';
     sigText.textContent = 'нет данных';
+  } else if (data.stale) {
+    st.className = 'status err';
+    st.textContent = 'Связь с гарнитурой прервалась, показания на экране устарели. ' +
+      'Программа переподключается сама. Если не помогает — проверьте питание гарнитуры и Bluetooth. (' +
+      (data.link || '') + ')';
+    sigText.textContent = 'связь потеряна';
   } else if (data.warmup) {
     st.className = 'status warn';
     st.textContent = 'Гарнитура на связи, идёт разогрев — показатели появятся примерно через 10 секунд.';
@@ -302,7 +308,7 @@ function step() {
 function draw() {
   const W = cv.width, H = cv.height, y = H * 0.60;
   ctx.clearRect(0, 0, W, H);
-  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup && !data.stale;
 
   // зоны: покой слева, работа справа
   ctx.fillStyle = 'rgba(75,179,240,.07)';

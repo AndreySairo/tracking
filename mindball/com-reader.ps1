@@ -66,10 +66,23 @@ Emit @{ info = "порт $Port открыт на скорости $Baud" }
 
 $buf = New-Object System.Collections.Generic.List[byte]
 
+# Сторож простоя. Разрыв связи с гарнитурой не закрывает COM-порт и не даёт ошибки:
+# порт просто перестаёт отдавать байты. Без этой проверки чтение висит вечно.
+$idleLimit = 8
+$lastByteAt = Get-Date
+
 try {
     while ($true) {
         $n = $sp.BytesToRead
-        if ($n -le 0) { Start-Sleep -Milliseconds 20; continue }
+        if ($n -le 0) {
+            if (((Get-Date) - $lastByteAt).TotalSeconds -ge $idleLimit) {
+                Emit @{ error = "данные с порта $Port прекратились: связь с гарнитурой потеряна" }
+                exit 2
+            }
+            Start-Sleep -Milliseconds 20
+            continue
+        }
+        $lastByteAt = Get-Date
 
         $tmp = New-Object byte[] $n
         [void]$sp.Read($tmp, 0, $n)

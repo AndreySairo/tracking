@@ -23,6 +23,7 @@ const state = {
   bands: null,          // восемь диапазонов ЭЭГ: дельта, тета, альфа x2, бета x2, гамма x2
   packets: 0,
   warmup: true,         // первые ~10 с гарнитура не выдаёт показатели
+  stale: false,         // данные перестали приходить: связь потеряна
   updated: 0,
 };
 
@@ -79,6 +80,7 @@ function startReader() {
 
       state.packets++;
       state.updated = Date.now();
+      state.stale = false;
       if (typeof o.poorSignal === 'number') state.poorSignal = o.poorSignal;
       if (typeof o.attention === 'number') state.attention = o.attention;
       if (typeof o.meditation === 'number') state.meditation = o.meditation;
@@ -97,12 +99,29 @@ function startReader() {
   reader.stderr.on('data', (d) => log(`чтение порта: ${d.trim()}`));
 
   reader.on('exit', (code) => {
-    state.link = `чтение порта ${COM_PORT} прервано (код ${code}), повтор через 3 с`;
+    state.link = `чтение порта прервано (код ${code}), переподключение через 3 с`;
+    state.stale = true;
     log(state.link);
     broadcast();
     setTimeout(startReader, 3000);
   });
 }
+
+// Сторож: если данные перестали приходить, читалку перезапускаем.
+// Молчащий порт не даёт ошибки, поэтому единственный признак - возраст последнего пакета.
+const STALE_AFTER = 8000;
+
+setInterval(() => {
+  if (!state.updated) return;
+  const age = Date.now() - state.updated;
+  if (age > STALE_AFTER && !state.stale) {
+    state.stale = true;
+    state.link = `данные прекратились ${Math.round(age / 1000)} с назад, переподключаюсь`;
+    log(state.link);
+    broadcast();
+    if (reader) reader.kill();      // обработчик exit поднимет чтение заново
+  }
+}, 2000);
 
 // --- отдача страницы и потока ----------------------------------------------
 
