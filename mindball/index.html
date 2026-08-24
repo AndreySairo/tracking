@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MindBall — шарик под управлением нейрогарнитуры</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #10141c; color: #e6e9ef;
+         font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: #8b93a7; margin-bottom: 18px; }
+  canvas { width: 100%; background: #161c28; border: 1px solid #262e3d;
+           border-radius: 10px; display: block; }
+  #scene { height: 300px; }
+  #chart { height: 170px; margin-top: 12px; }
+  .panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+           gap: 12px; margin: 16px 0; }
+  .card { background: #161c28; border: 1px solid #262e3d; border-radius: 10px; padding: 12px 14px; }
+  .label { color: #8b93a7; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .value { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; background: #262e3d; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 3px; transition: width .25s; }
+  .att > i { background: #f0a04b; }
+  .med > i { background: #4bb3f0; }
+  .modes, .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  button { background: #1e2634; color: #e6e9ef; border: 1px solid #303a4d; border-radius: 8px;
+           padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: #4a5771; }
+  button.on { background: #2f6fb0; border-color: #3f89d6; }
+  button.accent { background: #2c5c3a; border-color: #3d7c4f; }
+  .status { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
+  .ok   { background: #16301f; border: 1px solid #2b5c39; color: #9ae6b4; }
+  .warn { background: #33260f; border: 1px solid #6b4d1c; color: #f3cd8b; }
+  .err  { background: #331616; border: 1px solid #6b2b2b; color: #f0a0a0; }
+  .big  { background: #1b2740; border: 1px solid #35507e; color: #cfe0ff;
+          font-size: 17px; font-weight: 600; }
+  .hint { color: #8b93a7; font-size: 13px; margin-top: 16px; }
+  .hint b { color: #c3cad8; font-weight: 600; }
+  .hint p { margin: 8px 0; }
+  .note { color: #7d879c; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MindBall</h1>
+  <div class="sub">Шарик катится по данным нейрогарнитуры MindWave Mobile</div>
+
+  <div id="status" class="status err">ожидание данных…</div>
+  <div id="coach" class="status big" style="display:none"></div>
+
+  <div class="modes">
+    <button data-mode="position" class="on">Позиция: сосредоточение задаёт точку</button>
+    <button data-mode="balance">Баланс: сосредоточение вправо, расслабление влево</button>
+    <button data-mode="rhythm">Ритмы: бета вправо, альфа влево</button>
+    <button data-mode="blink">Моргание: меняет направление</button>
+  </div>
+
+  <div class="tools">
+    <button id="btnCalib" class="accent">Калибровка 65 с</button>
+    <button id="btnRec">Записать сеанс 60 с</button>
+    <span id="toolNote" class="note"></span>
+  </div>
+
+  <canvas id="scene" width="2040" height="600"></canvas>
+  <canvas id="chart" width="2040" height="340"></canvas>
+
+  <div class="panel">
+    <div class="card"><div class="label">Сосредоточение</div>
+      <div class="value" id="att">—</div><div class="bar att"><i id="attBar"></i></div></div>
+    <div class="card"><div class="label">Расслабление</div>
+      <div class="value" id="med">—</div><div class="bar med"><i id="medBar"></i></div></div>
+    <div class="card"><div class="label">Шкала дорожки</div>
+      <div class="value" id="cal">—</div><div class="label" id="calText">&nbsp;</div></div>
+    <div class="card"><div class="label">Качество контакта</div>
+      <div class="value" id="sig">—</div><div class="label" id="sigText">&nbsp;</div></div>
+    <div class="card"><div class="label">Пакетов принято</div>
+      <div class="value" id="pk">0</div><div class="label">&nbsp;</div></div>
+  </div>
+
+  <div class="hint">
+    <p><b>Шкала.</b> Левый край дорожки — ваш уровень покоя, правый — уровень рабочего напряжения.
+    Значения взяты из вашего замера: покой около 8, счёт около 46. Кнопка «Калибровка» переснимает их
+    заново: программа сама проведёт вас через полминуты счёта и полминуты покоя и выставит края дорожки.
+    Числа сохраняются в браузере и держатся между запусками.</p>
+    <p><b>Как управлять.</b> Вправо — любая настоящая умственная работа: устный счёт, чтение,
+    набор текста. Влево — закрыть глаза и отпустить внимание; просто «расслабиться» с открытыми глазами
+    прибор почти не отличает от покоя, ваш замер это и показал: показатель расслабления между счётом и
+    покоем менялся всего на 4 пункта, тогда как показатель сосредоточения — на 38.</p>
+    <p><b>Про инерцию.</b> Прибор отдаёт число раз в секунду, программа усредняет несколько секунд.
+    Между вашим усилием и приездом шарика проходит 3–5 секунд — это не сбой, а свойство измерения.
+    Мелкие подёргивания в середине дорожки — остаточный шум, он не значит ничего.</p>
+    <p><b>Условия работы.</b> Контакт должен быть 0–25. ThinkGear Connector и программы NeuroSky
+    должны быть закрыты — они занимают COM-порт.</p>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('scene'), ctx = cv.getContext('2d');
+const ch = document.getElementById('chart'), cctx = ch.getContext('2d');
+
+let mode = 'position';
+let data = { attention: 0, meditation: 0, poorSignal: 200, blink: 0, bands: null,
+             packets: 0, link: '', warmup: true, portBusy: false };
+
+// края шкалы: значение показателя в покое и при рабочем напряжении.
+// Значения по умолчанию взяты из замера пользователя: покой 8, счёт 46.
+let cal = { lo: 8, hi: 46, source: 'замер от 24.08' };
+try {
+  const saved = JSON.parse(localStorage.getItem('mindball.cal') || 'null');
+  if (saved && saved.hi - saved.lo >= 10) cal = saved;
+} catch {}
+
+let sAtt = 20, sMed = 50, sRhythm = 0;
+let calRhythm = { lo: -0.6, hi: 0.2 };
+const track = [];
+let x = 0.5, dir = 1, lastBlink = 0, target = 0.5;
+const R = 42;
+const started = Date.now();
+
+document.querySelectorAll('button[data-mode]').forEach(b => {
+  b.onclick = () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll('button[data-mode]').forEach(o => o.classList.toggle('on', o === b));
+  };
+});
+
+document.getElementById('btnRec').onclick = async () => {
+  const el = document.getElementById('toolNote');
+  await fetch('/record?sec=60&label=' + encodeURIComponent('сеанс'));
+  countdown(60, el, 'идёт запись', 'файл лежит в папке records');
+};
+
+function countdown(sec, el, text, done) {
+  let left = sec;
+  el.textContent = `${text}, осталось ${left} с`;
+  const t = setInterval(() => {
+    left--;
+    el.textContent = left > 0 ? `${text}, осталось ${left} с` : done;
+    if (left <= 0) { clearInterval(t); setTimeout(() => el.textContent = '', 8000); }
+  }, 1000);
+}
+
+// --- калибровка -------------------------------------------------------------
+
+let calib = null;   // { phase, endsAt, work: [], rest: [] }
+
+document.getElementById('btnCalib').onclick = async () => {
+  await fetch('/record?sec=70&label=' + encodeURIComponent('калибровка'));
+  calib = { phase: 'подготовка', endsAt: Date.now() + 5000, work: [], rest: [] };
+};
+
+function calibTick() {
+  if (!calib) return;
+  const left = Math.ceil((calib.endsAt - Date.now()) / 1000);
+  const el = document.getElementById('coach');
+  el.style.display = 'block';
+
+  if (calib.phase === 'подготовка') {
+    el.textContent = `Приготовьтесь. Через ${left} с начнём: полминуты устного счёта. — ${left}`;
+    if (left <= 0) { calib.phase = 'нагрузка'; calib.endsAt = Date.now() + 30000; }
+  } else if (calib.phase === 'нагрузка') {
+    el.textContent = `СЧИТАЙТЕ: вычитайте из 300 по 7, без пауз. Осталось ${left} с`;
+    if (left <= 22) calib.work.push(sAtt);      // первые 8 с отбрасываем: прибор инертен
+    if (left <= 0) { calib.phase = 'покой'; calib.endsAt = Date.now() + 30000; }
+  } else if (calib.phase === 'покой') {
+    el.textContent = `ПОКОЙ: закройте глаза, отпустите внимание. Осталось ${left} с`;
+    if (left <= 22) calib.rest.push(sAtt);
+    if (left <= 0) finishCalib();
+  }
+}
+setInterval(calibTick, 250);
+
+function median(a) { const s = [...a].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; }
+
+function finishCalib() {
+  const el = document.getElementById('coach');
+  if (calib.work.length < 5 || calib.rest.length < 5) {
+    el.textContent = 'Калибровка не удалась: данных мало. Проверьте контакт и повторите.';
+  } else {
+    const lo = Math.round(median(calib.rest));
+    const hi = Math.round(median(calib.work));
+    if (hi - lo < 10) {
+      el.textContent = `Калибровка не удалась: разница между счётом (${hi}) и покоем (${lo}) слишком мала. ` +
+                       `Повторите, считая без пауз и закрывая глаза в фазе покоя.`;
+    } else {
+      cal = { lo, hi, source: 'ваша калибровка' };
+      localStorage.setItem('mindball.cal', JSON.stringify(cal));
+      el.textContent = `Готово. Покой ${lo}, рабочее напряжение ${hi} — дорожка растянута между ними.`;
+    }
+  }
+  calib = null;
+  setTimeout(() => { el.style.display = 'none'; }, 12000);
+}
+
+// --- приём данных -----------------------------------------------------------
+
+const es = new EventSource('/stream');
+es.onmessage = (e) => { data = JSON.parse(e.data); onData(); };
+
+const ema = (prev, v, k) => prev + (v - prev) * k;
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+let lastSecond = 0;
+
+function onData() {
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+  if (live) {
+    sAtt = ema(sAtt, data.attention, 0.25);
+    sMed = ema(sMed, data.meditation, 0.25);
+    if (Array.isArray(data.bands)) {
+      const lg = v => Math.log10(Math.max(v, 1));
+      const alpha = (lg(data.bands[2]) + lg(data.bands[3])) / 2;
+      const beta  = (lg(data.bands[4]) + lg(data.bands[5])) / 2;
+      sRhythm = ema(sRhythm, beta - alpha, 0.18);
+    }
+    const now = Date.now();
+    if (now - lastSecond > 900) {
+      lastSecond = now;
+      track.push({ t: (now - started) / 1000, att: sAtt, med: sMed });
+      if (track.length > 120) track.shift();
+    }
+  }
+  paintPanel();
+}
+
+function paintPanel() {
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+  document.getElementById('att').textContent = live ? Math.round(sAtt) : '—';
+  document.getElementById('med').textContent = live ? Math.round(sMed) : '—';
+  document.getElementById('attBar').style.width = (live ? sAtt : 0) + '%';
+  document.getElementById('medBar').style.width = (live ? sMed : 0) + '%';
+  document.getElementById('sig').textContent = data.packets ? data.poorSignal : '—';
+  document.getElementById('pk').textContent = data.packets;
+  document.getElementById('cal').textContent = cal.lo + '–' + cal.hi;
+  document.getElementById('calText').textContent = cal.source;
+
+  const st = document.getElementById('status');
+  const sigText = document.getElementById('sigText');
+  if (!data.packets) {
+    st.className = 'status err';
+    st.textContent = data.portBusy
+      ? 'COM-порт занят. Закройте ThinkGear Connector и программы NeuroSky. (' + data.link + ')'
+      : 'Данных нет. ' + (data.link || '') + ' Проверьте, включена ли гарнитура.';
+    sigText.textContent = 'нет данных';
+  } else if (data.warmup) {
+    st.className = 'status warn';
+    st.textContent = 'Гарнитура на связи, идёт разогрев — показатели появятся примерно через 10 секунд.';
+    sigText.textContent = 'разогрев';
+  } else if (data.poorSignal >= 200) {
+    st.className = 'status err';
+    st.textContent = 'Датчик не касается кожи (контакт 200).';
+    sigText.textContent = 'датчик не на голове';
+  } else if (data.poorSignal > 50) {
+    st.className = 'status warn';
+    st.textContent = 'Контакт плохой — поправьте лобный датчик и клипсу на ухе.';
+    sigText.textContent = 'плохой контакт';
+  } else {
+    st.className = 'status ok';
+    const zone = sAtt <= cal.lo + (cal.hi - cal.lo) * 0.25 ? 'вы в зоне покоя, шарик слева'
+               : sAtt >= cal.lo + (cal.hi - cal.lo) * 0.75 ? 'вы в рабочей зоне, шарик справа'
+               : 'середина шкалы';
+    st.textContent = 'Сигнал в норме. ' + zone + '. Держите намерение 10–15 секунд — прибор отвечает не мгновенно.';
+    sigText.textContent = data.poorSignal === 0 ? 'отличный' : 'рабочий';
+  }
+}
+
+// --- движение ---------------------------------------------------------------
+
+function computeTarget() {
+  if (data.poorSignal >= 200 || !data.packets || data.warmup) return null;
+  if (mode === 'position') {
+    return 0.06 + clamp01((sAtt - cal.lo) / (cal.hi - cal.lo)) * 0.88;
+  }
+  if (mode === 'balance') {
+    const a = clamp01((sAtt - cal.lo) / (cal.hi - cal.lo));
+    const m = clamp01((sMed - 40) / 45);
+    return 0.5 + (a - m) * 0.44;
+  }
+  if (mode === 'rhythm') {
+    return 0.06 + clamp01((sRhythm - calRhythm.lo) / (calRhythm.hi - calRhythm.lo)) * 0.88;
+  }
+  return null;
+}
+
+function step() {
+  if (mode === 'blink') {
+    if (data.blink > 0 && data.blink !== lastBlink) { dir = -dir; lastBlink = data.blink; }
+    if (data.blink === 0) lastBlink = 0;
+    x += dir * (data.warmup ? 0 : 0.004);
+    if (x < 0.05) { x = 0.05; dir = 1; }
+    if (x > 0.95) { x = 0.95; dir = -1; }
+    target = x;
+  } else {
+    const t = computeTarget();
+    if (t !== null) { target = t; x += (target - x) * 0.03; }
+  }
+  draw(); drawChart();
+  requestAnimationFrame(step);
+}
+
+function draw() {
+  const W = cv.width, H = cv.height, y = H * 0.60;
+  ctx.clearRect(0, 0, W, H);
+  const live = data.poorSignal < 200 && data.packets > 0 && !data.warmup;
+
+  // зоны: покой слева, работа справа
+  ctx.fillStyle = 'rgba(75,179,240,.07)';
+  ctx.fillRect(60, 80, (W - 120) * 0.3, y + R - 60);
+  ctx.fillStyle = 'rgba(240,160,75,.07)';
+  ctx.fillRect(60 + (W - 120) * 0.7, 80, (W - 120) * 0.3, y + R - 60);
+
+  ctx.strokeStyle = '#2b3344'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(60, y + R + 10); ctx.lineTo(W - 60, y + R + 10); ctx.stroke();
+
+  ctx.fillStyle = '#4a5468';
+  ctx.font = '26px "Segoe UI", sans-serif';
+  ctx.textBaseline = 'middle';
+  const left  = mode === 'rhythm' ? 'альфа, покой' : `покой (${cal.lo})`;
+  const right = mode === 'rhythm' ? 'бета, работа' : `работа (${cal.hi})`;
+  ctx.textAlign = 'left';  ctx.fillText(left, 60, 46);
+  ctx.textAlign = 'right'; ctx.fillText(right, W - 60, 46);
+
+  if (live && mode !== 'blink') {
+    const tx = 60 + target * (W - 120);
+    ctx.strokeStyle = '#3d4c66'; ctx.lineWidth = 3; ctx.setLineDash([8, 8]);
+    ctx.beginPath(); ctx.moveTo(tx, y - R - 26); ctx.lineTo(tx, y + R + 4); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  const px = 60 + x * (W - 120);
+  const g = ctx.createRadialGradient(px - 13, y - 15, 5, px, y, R);
+  g.addColorStop(0, live ? '#ffd9a0' : '#5a6274');
+  g.addColorStop(1, live ? '#e08a2e' : '#39414f');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(px, y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath(); ctx.ellipse(px, y + R + 12, R * 0.8, 7, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawChart() {
+  const W = ch.width, H = ch.height;
+  cctx.clearRect(0, 0, W, H);
+  cctx.fillStyle = '#8b93a7';
+  cctx.font = '22px "Segoe UI", sans-serif';
+  cctx.textAlign = 'left'; cctx.textBaseline = 'top';
+  cctx.fillText('последние две минуты: сосредоточение (оранжевая), расслабление (синяя)', 20, 14);
+
+  const yOf = v => H - 30 - (v / 100) * (H - 70);
+  cctx.strokeStyle = '#222a38'; cctx.lineWidth = 2;
+  for (let v = 0; v <= 100; v += 25) {
+    cctx.beginPath(); cctx.moveTo(20, yOf(v)); cctx.lineTo(W - 20, yOf(v)); cctx.stroke();
+  }
+  // края шкалы
+  cctx.setLineDash([10, 8]); cctx.lineWidth = 2;
+  cctx.strokeStyle = '#3f6b96';
+  cctx.beginPath(); cctx.moveTo(20, yOf(cal.lo)); cctx.lineTo(W - 20, yOf(cal.lo)); cctx.stroke();
+  cctx.strokeStyle = '#9c6a2f';
+  cctx.beginPath(); cctx.moveTo(20, yOf(cal.hi)); cctx.lineTo(W - 20, yOf(cal.hi)); cctx.stroke();
+  cctx.setLineDash([]);
+
+  if (track.length < 2) return;
+  const line = (key, color) => {
+    cctx.strokeStyle = color; cctx.lineWidth = 4;
+    cctx.beginPath();
+    track.forEach((p, i) => {
+      const xx = 20 + (i / (track.length - 1)) * (W - 40);
+      i ? cctx.lineTo(xx, yOf(p[key])) : cctx.moveTo(xx, yOf(p[key]));
+    });
+    cctx.stroke();
+  };
+  line('att', '#f0a04b');
+  line('med', '#4bb3f0');
+}
+
+paintPanel();
+step();
+</script>
+</body>
+</html>
