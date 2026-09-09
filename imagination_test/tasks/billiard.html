@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Мысленный бильярд</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>На столе показаны точка старта и направление удара. Шар идёт по прямой и отражается от бортов по правилу «угол падения равен углу отражения», без трения и без вращения. Требуется указать щелчком точку, в которой шар коснётся борта в N-й раз.</p>
+    <p>Погрешность считается в долях большей стороны стола:</p>
+    <table class="tbl" style="max-width:420px">
+      <tr><th>Погрешность</th><th>Баллы</th></tr>
+      <tr><td>менее 5 %</td><td>сохраняются полностью</td></tr>
+      <tr><td>от 5 до 10 %</td><td>минус 20 %</td></tr>
+      <tr><td>от 10 до 30 %</td><td>минус 60 %</td></tr>
+      <tr><td>30 % и больше</td><td>попытка не засчитана</td></tr>
+    </table>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'billiard', HITS = [2, 3, 4, 6, 8];
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var W = 1, H = 0.62, rung, N, start, dir, hits;
+var PAD = 40, SC = 620;
+
+function trace(p, d, n) {
+  var res = [], cur = [p[0], p[1]], dd = [d[0], d[1]];
+  for (var i = 0; i < n; i++) {
+    var t = Infinity, vert = false;
+    if (dd[0] > 1e-9) { var a = (W - cur[0]) / dd[0]; if (a > 1e-9 && a < t) { t = a; vert = true; } }
+    if (dd[0] < -1e-9) { var b = (0 - cur[0]) / dd[0]; if (b > 1e-9 && b < t) { t = b; vert = true; } }
+    if (dd[1] > 1e-9) { var c = (H - cur[1]) / dd[1]; if (c > 1e-9 && c < t) { t = c; vert = false; } }
+    if (dd[1] < -1e-9) { var e = (0 - cur[1]) / dd[1]; if (e > 1e-9 && e < t) { t = e; vert = false; } }
+    if (!isFinite(t)) return null;
+    cur = [cur[0] + dd[0] * t, cur[1] + dd[1] * t];
+    cur[0] = Math.min(W, Math.max(0, cur[0]));
+    cur[1] = Math.min(H, Math.max(0, cur[1]));
+    res.push([cur[0], cur[1]]);
+    if (vert) dd = [-dd[0], dd[1]]; else dd = [dd[0], -dd[1]];
+  }
+  return res;
+}
+
+function nearCorner(p) {
+  var m = Math.max(W, H) * 0.05;
+  return (Math.min(p[0], W - p[0]) < m && Math.min(p[1], H - p[1]) < m);
+}
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  N = HITS[rung - 1];
+  H = 0.5 + Math.random() * 0.35;
+  var tries = 0;
+  do {
+    start = [0.1 + Math.random() * 0.8, 0];
+    var ang = (25 + Math.random() * 130) * Math.PI / 180;
+    dir = [Math.cos(ang), Math.sin(ang)];
+    hits = trace(start, dir, N);
+    tries++;
+  } while ((!hits || hits.some(nearCorner)) && tries < 300);
+  document.getElementById('start').style.display = 'none';
+  ask();
+};
+
+function px(p) { return [PAD + p[0] * SC, PAD + (H - p[1]) * SC]; }
+
+function drawTable(cv, path, answer) {
+  var ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  var a = px([0, H]), b = px([W, 0]);
+  ctx.strokeStyle = '#5d6b80'; ctx.lineWidth = 2;
+  ctx.strokeRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+  /* старт и направление */
+  var s = px(start), tip = px([start[0] + dir[0] * 0.18, start[1] + dir[1] * 0.18]);
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath(); ctx.arc(s[0], s[1], 6, 0, 6.3); ctx.fill();
+  if (path) {
+    ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(s[0], s[1]);
+    path.forEach(function (p) { var q = px(p); ctx.lineTo(q[0], q[1]); });
+    ctx.stroke();
+    var last = px(path[path.length - 1]);
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath(); ctx.arc(last[0], last[1], 7, 0, 6.3); ctx.fill();
+    ctx.font = '13px sans-serif'; ctx.fillText('верно', last[0] + 10, last[1] - 8);
+  }
+  if (answer) {
+    var q2 = px(answer);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(q2[0], q2[1], 7, 0, 6.3); ctx.fill();
+    ctx.font = '13px sans-serif'; ctx.fillText('ваш ответ', q2[0] + 10, q2[1] + 16);
+  }
+}
+
+function snap(p) {
+  var cand = [[p[0], 0], [p[0], H], [0, p[1]], [W, p[1]]];
+  var best = null, bd = 1e9;
+  cand.forEach(function (c) {
+    c = [Math.min(W, Math.max(0, c[0])), Math.min(H, Math.max(0, c[1]))];
+    var d = Math.hypot(c[0] - p[0], c[1] - p[1]);
+    if (d < bd) { bd = d; best = c; }
+  });
+  return best;
+}
+
+function ask() {
+  var angDeg = Math.round(Math.atan2(dir[1], dir[0]) * 180 / Math.PI);
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Стол ' + W.toFixed(2) + ' × ' + H.toFixed(2) + '. Шар выходит из жёлтой точки под углом ' + angDeg + '° к нижнему борту. Щёлкните точку <b>' + N + '-го касания борта</b>.</p>' +
+    '<canvas id="cv" width="' + (SC + 2 * PAD) + '" height="' + (H * SC + 2 * PAD) + '"></canvas>' +
+    '<p class="hint">Щелчок автоматически притягивается к ближайшему борту.</p></div>';
+  var cv = document.getElementById('cv');
+  drawTable(cv, null, null);
+  cv.onclick = function (e) {
+    var r = cv.getBoundingClientRect();
+    var x = (e.clientX - r.left - PAD) / SC, y = H - (e.clientY - r.top - PAD) / SC;
+    grade(snap([x, y]));
+  };
+}
+
+function grade(ans) {
+  var real = hits[hits.length - 1];
+  var err = Math.hypot(ans[0] - real[0], ans[1] - real[1]) / Math.max(W, H) * 100;
+  var factor = err < 5 ? 1 : err < 10 ? 0.8 : err < 30 ? 0.4 : 0;
+  var ok = factor > 0;
+  var d = 'Погрешность ' + err.toFixed(1) + ' % большей стороны стола.' +
+          (ok ? ' Множитель ' + factor + '.' : ' Больше 30 % — попытка не засчитана.');
+  var h = IT.report(ID, rung, ok, factor, d);
+  h += '<div class="panel"><h3>Истинный путь</h3><canvas id="cv2" width="' + (SC + 2 * PAD) + '" height="' + (H * SC + 2 * PAD) + '"></canvas></div>';
+  document.getElementById('stage').innerHTML = h;
+  drawTable(document.getElementById('cv2'), hits, ans);
+}
+});
+</script>
+</body>
+</html>

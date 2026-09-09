@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Крестики-нолики вслепую</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Доска не показывается. Вы играете крестиками, противник отвечает случайным законным ходом, который объявляется один раз и больше на экране не повторяется. Ход в занятую клетку — немедленная неудача. После окончания партии надо воспроизвести содержимое всех клеток.</p>
+    <p class="hint">Сетка на экране служит только для указания координат: она не показывает, что где стоит.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'xo';
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var N, WIN, B, rung, over, msg, failed;
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  N = rung + 2; WIN = N === 3 ? 3 : 4;
+  B = new Array(N * N).fill('');
+  over = false; failed = false; msg = 'Ваш ход.';
+  document.getElementById('start').style.display = 'none';
+  play();
+};
+
+function line(v, i) {
+  var r = Math.floor(i / N), c = i % N;
+  var dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  for (var d = 0; d < 4; d++) {
+    var cnt = 1;
+    for (var s = -1; s <= 1; s += 2) {
+      var rr = r + dirs[d][0] * s, cc = c + dirs[d][1] * s;
+      while (rr >= 0 && rr < N && cc >= 0 && cc < N && B[rr * N + cc] === v) { cnt++; rr += dirs[d][0] * s; cc += dirs[d][1] * s; }
+    }
+    if (cnt >= WIN) return true;
+  }
+  return false;
+}
+
+function play() {
+  var h = '<div class="panel"><p class="q">' + msg + '</p>';
+  h += '<div class="grid" style="grid-template-columns:repeat(' + N + ',auto)">';
+  for (var i = 0; i < N * N; i++) h += '<div class="cell click" data-i="' + i + '">' + (Math.floor(i / N) + 1) + ',' + (i % N + 1) + '</div>';
+  h += '</div><p class="hint">Нужно ' + WIN + ' в ряд. Клетки подписаны как «строка,столбец».</p></div>';
+  document.getElementById('stage').innerHTML = h;
+  var cells = document.querySelectorAll('.cell.click');
+  for (var k = 0; k < cells.length; k++) cells[k].onclick = function () { move(parseInt(this.getAttribute('data-i'), 10)); };
+}
+
+function move(i) {
+  if (over) return;
+  if (B[i] !== '') { failed = true; over = true; return finish('Ход в занятую клетку — строка ' + (Math.floor(i / N) + 1) + ', столбец ' + (i % N + 1) + '.'); }
+  B[i] = 'X';
+  if (line('X', i)) { over = true; return finish('Партия окончена: вы выиграли.'); }
+  var free = [];
+  for (var j = 0; j < N * N; j++) if (B[j] === '') free.push(j);
+  if (!free.length) { over = true; return finish('Партия окончена: ничья.'); }
+  var o = free[IT.rnd(free.length)];
+  B[o] = 'O';
+  if (line('O', o)) { over = true; return finish('Противник сходил: строка ' + (Math.floor(o / N) + 1) + ', столбец ' + (o % N + 1) + '. Партия окончена: вы проиграли.'); }
+  var free2 = 0;
+  for (var m = 0; m < N * N; m++) if (B[m] === '') free2++;
+  if (!free2) { over = true; return finish('Противник сходил: строка ' + (Math.floor(o / N) + 1) + ', столбец ' + (o % N + 1) + '. Партия окончена: ничья.'); }
+  msg = 'Противник сходил: строка ' + (Math.floor(o / N) + 1) + ', столбец ' + (o % N + 1) + '. Ваш ход.';
+  play();
+}
+
+var qs, qi, res;
+function finish(text) {
+  if (failed) return grade(text);
+  var idx = []; for (var i = 0; i < N * N; i++) idx.push(i);
+  qs = IT.shuffle(idx); qi = 0; res = [];
+  askCell(text);
+}
+
+function askCell(text) {
+  if (qi >= qs.length) return grade(text);
+  var c = qs[qi], r = Math.floor(c / N), col = c % N;
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="dim">' + text + '</p><p class="dim">Воспроизведение: клетка ' + (qi + 1) + ' из ' + qs.length + '</p>' +
+    '<p class="q">Строка ' + (r + 1) + ', столбец ' + (col + 1) + ' — что там?</p>' +
+    '<div class="row"><button class="primary" id="x">Крестик</button><button id="o">Нолик</button><button id="e">Пусто</button></div></div>';
+  document.getElementById('x').onclick = function () { res.push('X'); qi++; askCell(text); };
+  document.getElementById('o').onclick = function () { res.push('O'); qi++; askCell(text); };
+  document.getElementById('e').onclick = function () { res.push(''); qi++; askCell(text); };
+}
+
+function grade(text) {
+  var bad = 0, ok;
+  if (failed) { ok = false; }
+  else { for (var i = 0; i < qs.length; i++) if (res[i] !== B[qs[i]]) bad++; ok = bad === 0; }
+  var d = failed ? text : (ok ? text + ' Все клетки воспроизведены точно.' : text + ' Ошибок в воспроизведении: ' + bad + '.');
+  var h = IT.report(ID, rung, ok, 1, d);
+  h += '<div class="panel"><h3>Конечная позиция</h3><div class="grid" style="grid-template-columns:repeat(' + N + ',auto)">';
+  for (var j = 0; j < N * N; j++) h += '<div class="cell small">' + (B[j] === 'X' ? '×' : B[j] === 'O' ? '○' : '') + '</div>';
+  h += '</div></div>';
+  document.getElementById('stage').innerHTML = h;
+}
+});
+</script>
+</body>
+</html>

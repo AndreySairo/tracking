@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Иероглиф за 5 секунд</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Случайный знак показывается ровно 5 секунд. Затем он исчезает, и его надо зарисовать по памяти на бумаге. Только после того, как рисунок закончен, открывается оригинал для сверки.</p>
+    <p class="hint">Ошибкой считается пропущенная, лишняя либо неверно расположенная черта. Число черт в ступенях приблизительное: оно задаёт сложность знака, а не проверяется отдельно.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'hanzi';
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var POOL = [
+ '舌竹米羊血州舟老而耳自至色存亦兆光各亥企伏伐仰灰刑列劣匠印危吉',
+ '音風飛面首香界政春星昨泉皆甚重限保便建城故施是柱査独珍県相省研神秋級約美茶草訂軍郊',
+ '就期落博敢提場報幅帽復悲惑象貴買費越週遊開間陽集順飯黒晩検極植温満湯減測焼然番短税童等筆結給',
+ '機橋燃積築興薬融衛親諸賢輸遺錯頭館龍磨縦憲激濃樹操整壁奮憶擁隣導縛薦諮輝衡錘鋼默',
+ '議競護譲響鐘籍懸欄騰醸鶴驚鑑鬱靈鹽讚鑿顯艦蘭覽廳灣觀讓纖鱗鷗齡驟躍籠籤纜'
+];
+
+var rung, ch;
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  var p = POOL[rung - 1];
+  ch = p[IT.rnd(p.length)];
+  document.getElementById('start').style.display = 'none';
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><div class="timer" id="tm"></div>' +
+    '<div style="font-size:220px;line-height:1.1;text-align:center;font-family:\'MS Mincho\',\'SimSun\',serif">' + ch + '</div></div>';
+  IT.countdown(document.getElementById('tm'), 5, draw);
+};
+
+function draw() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Зарисуйте знак по памяти на бумаге. Не спешите, время не ограничено.</p>' +
+    '<div class="row"><button class="primary" id="done">Рисунок закончен, показать оригинал</button></div></div>';
+  document.getElementById('done').onclick = check;
+}
+
+function check() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><div style="font-size:220px;line-height:1.1;text-align:center;font-family:\'MS Mincho\',\'SimSun\',serif">' + ch + '</div>' +
+    '<p class="q">Сверьте рисунок с оригиналом по трём пунктам.</p>' +
+    '<p><label><input type="checkbox" id="c1"> число черт совпадает: ни одной пропущенной, ни одной лишней</label></p>' +
+    '<p><label><input type="checkbox" id="c2"> все составные элементы знака присутствуют и опознаваемы</label></p>' +
+    '<p><label><input type="checkbox" id="c3"> взаимное расположение и пропорции элементов совпадают</label></p>' +
+    '<div class="row"><button class="primary" id="fin">Записать попытку</button></div>' +
+    '<p class="hint">Три отметки — успех, иначе неудача. Сомнение засчитывается против себя: сомневаетесь — не ставьте отметку.</p></div>';
+  document.getElementById('fin').onclick = function () {
+    var a = document.getElementById('c1').checked,
+        b = document.getElementById('c2').checked,
+        c = document.getElementById('c3').checked;
+    var ok = a && b && c;
+    var miss = [];
+    if (!a) miss.push('черты'); if (!b) miss.push('элементы'); if (!c) miss.push('расположение');
+    document.getElementById('stage').innerHTML =
+      IT.report(ID, rung, ok, 1, 'Знак: ' + ch + (ok ? '. Воспроизведён точно.' : '. Не сошлось: ' + miss.join(', ') + '.'));
+  };
+}
+});
+</script>
+</body>
+</html>

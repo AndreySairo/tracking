@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Умножение в уме</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Случайные числа, счёт только в уме: без записи, без пальцев, без калькулятора. Отсчёт времени начинается вместе с показом чисел.</p>
+    <p class="hint">Числа называются прописью: записанные цифрами, они сами показывают разряды и тем облегчают счёт.</p>
+    <p class="hint">Смежный блок в основные 100 баллов не входит: он измеряет удержание символов в рабочей памяти, а не чёткость картинки.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'mult';
+var CFG = [
+  { digits: 2, limit: 180 },
+  { digits: 2, limit: 60 },
+  { digits: 2, limit: 30 },
+  { digits: 3, limit: 0 },
+  { digits: 3, limit: 180 }
+];
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+/* числа выводятся прописью: цифры на экране подсказывают разряды и упрощают счёт */
+var W_U = ['','один','два','три','четыре','пять','шесть','семь','восемь','девять'];
+var W_T2 = ['десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+var W_T = ['','','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'];
+var W_H = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
+
+function words(n) {
+  var out = [], h = Math.floor(n / 100), r = n % 100;
+  if (h) out.push(W_H[h]);
+  if (r >= 10 && r < 20) out.push(W_T2[r - 10]);
+  else {
+    var t = Math.floor(r / 10), u = r % 10;
+    if (t) out.push(W_T[t]);
+    if (u) out.push(W_U[u]);
+  }
+  return out.join(' ');
+}
+
+function num(d) {
+  var lo = d === 2 ? 12 : 102, hi = d === 2 ? 99 : 999, v;
+  do { v = lo + IT.rnd(hi - lo + 1); } while (v % 10 === 0 || (d === 2 && v % 11 === 0));
+  return v;
+}
+
+var rung, a, b, t0, iv;
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  var c = CFG[rung - 1];
+  a = num(c.digits); b = num(c.digits);
+  document.getElementById('start').style.display = 'none';
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><div class="timer" id="tm">0:00</div>' +
+    '<div class="big" style="font-size:30px;letter-spacing:1px;line-height:1.5">' + words(a) + '<br>умножить на<br>' + words(b) + '</div>' +
+    '<div class="row"><input type="number" id="ans" style="width:200px;font-size:22px" autocomplete="off">' +
+    '<button class="primary" id="fin">Ответ</button></div>' +
+    '<p class="hint">' + (c.limit ? 'Предел времени: ' + IT.fmt(c.limit) + '.' : 'Время не ограничено, но фиксируется.') + '</p></div>';
+  t0 = Date.now();
+  iv = setInterval(function () {
+    document.getElementById('tm').textContent = IT.fmt(Math.floor((Date.now() - t0) / 1000));
+  }, 250);
+  document.getElementById('ans').focus();
+  document.getElementById('fin').onclick = grade;
+  document.getElementById('ans').onkeydown = function (e) { if (e.key === 'Enter') grade(); };
+};
+
+function grade() {
+  clearInterval(iv);
+  var c = CFG[rung - 1];
+  var sec = Math.round((Date.now() - t0) / 1000);
+  var v = parseInt(document.getElementById('ans').value, 10);
+  var right = v === a * b;
+  var inTime = !c.limit || sec <= c.limit;
+  var ok = right && inTime;
+  var d = a + ' × ' + b + ' = ' + (a * b) + '. Ваш ответ: ' + (isNaN(v) ? '—' : v) + '. Время: ' + IT.fmt(sec) + '.' +
+    (right ? '' : ' Ответ неверен.') + (inTime ? '' : ' Предел времени превышен.');
+  document.getElementById('stage').innerHTML = IT.report(ID, rung, ok, 1, d);
+}
+});
+</script>
+</body>
+</html>

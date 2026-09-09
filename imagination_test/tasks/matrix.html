@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Матрица букв</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Матрица случайных букв показывается 15 секунд, но отсчёт можно прервать кнопкой «Запомнил, дальше». Затем она исчезает, и её надо прочитать в четырёх порядках, не совпадающих с порядком заучивания. Если картинка держится целиком, порядок чтения безразличен.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'matrix', T = IT.task(ID);
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var ALPHA = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЭЮЯ';
+var n, M, rung, steps, si, answers;
+
+function norm(s) { return (s || '').toUpperCase().replace(/[^А-ЯЁ]/g, ''); }
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  n = rung + 2;
+  M = [];
+  for (var r = 0; r < n; r++) { M[r] = []; for (var c = 0; c < n; c++) M[r][c] = ALPHA[IT.rnd(ALPHA.length)]; }
+  document.getElementById('start').style.display = 'none';
+  show();
+};
+
+function show() {
+  var h = '<div class="panel"><div class="timer" id="tm"></div><div style="text-align:center">';
+  h += '<div class="grid" style="grid-template-columns:repeat(' + n + ',auto)">';
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) h += '<div class="cell">' + M[r][c] + '</div>';
+  h += '</div></div>' + '<div class="row" style="justify-content:center"><button class="primary" id="skip">Запомнил, дальше</button></div>' + '</div>';
+  document.getElementById('stage').innerHTML = h;
+  var skip = IT.phase(document.getElementById('tm'), 15, quiz);
+  document.getElementById('skip').onclick = skip;
+}
+
+function quiz() {
+  var rowsUp = '', cols = '', diag = '', anti = '';
+  for (var r = n - 1; r >= 0; r--) for (var c = n - 1; c >= 0; c--) rowsUp += M[r][c];
+  for (var c2 = 0; c2 < n; c2++) for (var r2 = 0; r2 < n; r2++) cols += M[r2][c2];
+  for (var i = 0; i < n; i++) { diag += M[i][i]; anti += M[i][n - 1 - i]; }
+
+  steps = [
+    { q: 'Прочтите строки снизу вверх, каждую справа налево. Всего ' + (n * n) + ' букв.', a: rowsUp },
+    { q: 'Прочтите столбцы слева направо, каждый сверху вниз. Всего ' + (n * n) + ' букв.', a: cols },
+    { q: 'Главная диагональ сверху слева вниз направо, затем побочная сверху справа вниз налево. Всего ' + (2 * n) + ' букв.', a: diag + anti }
+  ];
+  var used = {};
+  for (var k = 0; k < 5; k++) {
+    var rr, cc, key;
+    do { rr = IT.rnd(n); cc = IT.rnd(n); key = rr + ':' + cc; } while (used[key]);
+    used[key] = 1;
+    steps.push({ q: 'Какая буква в строке ' + (rr + 1) + ' (сверху), столбце ' + (cc + 1) + ' (слева)?', a: M[rr][cc] });
+  }
+  si = 0; answers = [];
+  askStep();
+}
+
+function askStep() {
+  if (si >= steps.length) return grade();
+  var s = steps[si];
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="dim">Вопрос ' + (si + 1) + ' из ' + steps.length + '</p>' +
+    '<p class="q">' + s.q + '</p>' +
+    '<div class="row"><input type="text" id="ans" size="' + Math.max(12, s.a.length + 4) + '" autocomplete="off">' +
+    '<button class="primary" id="nx">Дальше</button></div>' +
+    '<p class="hint">Пробелы и регистр не важны. Вернуться к предыдущему вопросу нельзя.</p></div>';
+  var inp = document.getElementById('ans');
+  inp.focus();
+  function next() { answers.push(norm(inp.value)); si++; askStep(); }
+  document.getElementById('nx').onclick = next;
+  inp.onkeydown = function (e) { if (e.key === 'Enter') next(); };
+}
+
+function grade() {
+  var wrong = [];
+  for (var i = 0; i < steps.length; i++) if (answers[i] !== norm(steps[i].a)) wrong.push(i + 1);
+  var ok = wrong.length === 0;
+  var d = ok ? 'Все ' + steps.length + ' ответов точны.' : 'Ошибки в вопросах: ' + wrong.join(', ') + '.';
+  var h = IT.report(ID, rung, ok, 1, d);
+  h += '<div class="panel"><h3>Правильные ответы</h3><table class="tbl">';
+  for (var j = 0; j < steps.length; j++) {
+    var good = answers[j] === norm(steps[j].a);
+    h += '<tr><td>' + (j + 1) + '</td><td class="' + (good ? 'ok' : 'bad') + '">' + (answers[j] || '—') + '</td><td>' + norm(steps[j].a) + '</td></tr>';
+  }
+  h += '</table><h3>Матрица</h3><div class="grid" style="grid-template-columns:repeat(' + n + ',auto)">';
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) h += '<div class="cell small">' + M[r][c] + '</div>';
+  h += '</div></div>';
+  document.getElementById('stage').innerHTML = h;
+}
+});
+</script>
+</body>
+</html>

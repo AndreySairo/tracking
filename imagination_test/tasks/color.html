@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Цвет по памяти</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Случайный цвет показывается 5 секунд. Затем 60 секунд удержания на пустом экране, и только после этого открывается палитра, в которой цвет надо найти по памяти.</p>
+    <p class="hint">Расхождение считается по формуле CIEDE2000. Порог, ниже которого глаз не различает два цвета, — около 2,3, поэтому верхняя ступень означает воспроизведение на пределе восприятия.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'color', TH = [20, 12, 8, 5, 3];
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var rung, target, pick = { h: 180, s: 50, l: 50 };
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  var h = IT.rnd(360), s = 45 + IT.rnd(51), l = 30 + IT.rnd(41);
+  target = IT.hsl2rgb(h, s, l);
+  pick = { h: IT.rnd(360), s: 50, l: 50 };
+  document.getElementById('start').style.display = 'none';
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><div class="timer" id="tm"></div>' +
+    '<div style="height:260px;border-radius:10px;background:' + IT.hex(target) + '"></div></div>';
+  IT.countdown(document.getElementById('tm'), 5, hold);
+};
+
+function hold() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Удерживайте цвет. Не смотрите на другие цветные поверхности.</p><div class="timer" id="tm2"></div></div>';
+  IT.countdown(document.getElementById('tm2'), 60, picker);
+}
+
+function picker() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Найдите цвет в палитре.</p>' +
+    '<div class="flex"><div><canvas id="sq" width="300" height="300"></canvas><br><canvas id="hue" width="300" height="26"></canvas></div>' +
+    '<div><div id="prev" style="width:180px;height:180px;border-radius:10px;border:1px solid #2c3340"></div>' +
+    '<p class="hint" id="val"></p>' +
+    '<button class="primary" id="ok">Это он</button></div></div>' +
+    '<p class="hint">Верхний квадрат — насыщенность по горизонтали, светлота по вертикали. Нижняя полоса — тон.</p></div>';
+
+  var sq = document.getElementById('sq'), hu = document.getElementById('hue');
+  function drawHue() {
+    var c = hu.getContext('2d');
+    for (var x = 0; x < 300; x++) { c.fillStyle = IT.hex(IT.hsl2rgb(x / 300 * 360, 100, 50)); c.fillRect(x, 0, 1, 26); }
+  }
+  function drawSq() {
+    var c = sq.getContext('2d');
+    for (var x = 0; x < 300; x += 2) for (var y = 0; y < 300; y += 2) {
+      c.fillStyle = IT.hex(IT.hsl2rgb(pick.h, x / 300 * 100, 100 - y / 300 * 100));
+      c.fillRect(x, y, 2, 2);
+    }
+    c.strokeStyle = '#000'; c.lineWidth = 2;
+    c.beginPath(); c.arc(pick.s / 100 * 300, (100 - pick.l) / 100 * 300, 7, 0, 6.3); c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 1;
+    c.beginPath(); c.arc(pick.s / 100 * 300, (100 - pick.l) / 100 * 300, 7, 0, 6.3); c.stroke();
+  }
+  function upd() {
+    var rgb = IT.hsl2rgb(pick.h, pick.s, pick.l);
+    document.getElementById('prev').style.background = IT.hex(rgb);
+    document.getElementById('val').textContent = 'тон ' + Math.round(pick.h) + '°, насыщенность ' + Math.round(pick.s) + '%, светлота ' + Math.round(pick.l) + '%';
+    drawSq();
+  }
+  sq.onclick = function (e) {
+    var r = sq.getBoundingClientRect();
+    pick.s = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100));
+    pick.l = Math.max(0, Math.min(100, 100 - (e.clientY - r.top) / r.height * 100));
+    upd();
+  };
+  hu.onclick = function (e) {
+    var r = hu.getBoundingClientRect();
+    pick.h = Math.max(0, Math.min(359.9, (e.clientX - r.left) / r.width * 360));
+    upd();
+  };
+  drawHue(); upd();
+  document.getElementById('ok').onclick = grade;
+}
+
+function grade() {
+  var got = IT.hsl2rgb(pick.h, pick.s, pick.l);
+  var dE = IT.deltaE00(IT.rgb2lab(target[0], target[1], target[2]), IT.rgb2lab(got[0], got[1], got[2]));
+  var ok = dE <= TH[rung - 1];
+  var best = 0;
+  for (var i = 0; i < TH.length; i++) if (dE <= TH[i]) best = i + 1;
+  var d = 'Расхождение ΔE = ' + dE.toFixed(2) + '. Порог ступени ' + rung + ': ' + TH[rung - 1] + '. Этот результат покрывает ступень ' + best + '.';
+  var h = IT.report(ID, rung, ok, 1, d);
+  h += '<div class="panel"><h3>Сверка</h3><div class="flex">' +
+    '<div><div style="width:200px;height:140px;border-radius:8px;background:' + IT.hex(target) + '"></div><p class="hint">был показан</p></div>' +
+    '<div><div style="width:200px;height:140px;border-radius:8px;background:' + IT.hex(got) + '"></div><p class="hint">вы выбрали</p></div>' +
+    '</div></div>';
+  document.getElementById('stage').innerHTML = h;
+}
+});
+</script>
+</body>
+</html>

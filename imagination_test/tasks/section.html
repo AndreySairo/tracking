@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Сечение тела</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>На рёбрах тела отмечены три точки. Через них проходит секущая плоскость. Требуется назвать число вершин сечения, а начиная со второй ступени — ещё и нарисовать его форму.</p>
+    <p>Тело порождается заново при каждом запуске: с третьей ступени это случайный выпуклый многогранник с заданным числом вершин — призма, пирамида, бипирамида либо оболочка точек на случайном эллипсоиде, и всё это ещё раз растянуто и скошено случайным преобразованием. Двух одинаковых тел не будет.</p>
+    <p class="hint">Тело можно крутить мышью сколько угодно: задача не на запоминание, а на построение сечения в уме. Форма сверяется с точным построением: сравниваются число вершин и последовательность длин сторон, приведённых к периметру, с допуском 7 %. Поворот и зеркальное отражение рисунка расхождением не считаются — важна форма, а не то, как вы её положили на лист.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'section';
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+/* ---------- порождение выпуклых тел ---------- */
+
+/* центрируем и приводим к одному размеру, чтобы масштаб отрисовки был постоянным */
+function normalizeBody(V) {
+  var c = V.reduce(function (s, p) { return add(s, p); }, [0,0,0]);
+  c = mul(c, 1 / V.length);
+  var m = 0;
+  var W = V.map(function (p) { var q = sub(p, c); m = Math.max(m, len(q)); return q; });
+  return W.map(function (p) { return mul(p, 1.35 / m); });
+}
+
+/* случайное аффинное преобразование: неравномерный масштаб, сдвиг и два поворота.
+   Выпуклость сохраняется, пропорции тела меняются сильно */
+function affine(V) {
+  var sx = 0.55 + Math.random(), sy = 0.55 + Math.random(), sz = 0.55 + Math.random();
+  var sh = (Math.random() - 0.5) * 0.8, a = Math.random() * 6.283, b = Math.random() * 6.283;
+  return V.map(function (p) {
+    var x = p[0]*sx + p[2]*sh, y = p[1]*sy, z = p[2]*sz;
+    var x1 = x*Math.cos(a) - y*Math.sin(a), y1 = x*Math.sin(a) + y*Math.cos(a);
+    var y2 = y1*Math.cos(b) - z*Math.sin(b), z2 = y1*Math.sin(b) + z*Math.cos(b);
+    return [x1, y2, z2];
+  });
+}
+
+function cubeV() {
+  var V = [];
+  for (var i = 0; i < 8; i++) V.push([(i&1)?1:-1, (i&2)?1:-1, (i&4)?1:-1]);
+  return V;
+}
+function ring(k, r, z, phase, jitter) {
+  var V = [];
+  for (var i = 0; i < k; i++) {
+    var a = phase + i * 2 * Math.PI / k + (jitter ? (Math.random()-0.5) * jitter : 0);
+    V.push([r * Math.cos(a), r * Math.sin(a), z]);
+  }
+  return V;
+}
+function genPrism() {      /* призма, усечённая пирамида либо антипризма со случайным основанием */
+  var k = 3 + IT.rnd(5), ph = Math.random() * 6.283;
+  var anti = Math.random() < 0.4 ? Math.PI / k : 0;
+  var r1 = 0.7 + Math.random() * 0.6, r2 = 0.3 + Math.random() * 1.0;
+  var h = 0.7 + Math.random() * 1.1;
+  return ring(k, r1, -h, ph, 0.3).concat(ring(k, r2, h, ph + anti, 0.3));
+}
+function genPyramid() {    /* пирамида с наклонной вершиной */
+  var k = 4 + IT.rnd(4), ph = Math.random() * 6.283;
+  var V = ring(k, 0.9 + Math.random() * 0.5, -0.8, ph, 0.35);
+  V.push([(Math.random()-0.5) * 1.3, (Math.random()-0.5) * 1.3, 0.9 + Math.random()]);
+  return V;
+}
+function genBipyramid() {  /* бипирамида с несимметричными вершинами */
+  var k = 3 + IT.rnd(4), ph = Math.random() * 6.283;
+  var V = ring(k, 0.9 + Math.random() * 0.4, 0, ph, 0.35);
+  V.push([(Math.random()-0.5)*0.9, (Math.random()-0.5)*0.9,  0.8 + Math.random() * 0.9]);
+  V.push([(Math.random()-0.5)*0.9, (Math.random()-0.5)*0.9, -0.8 - Math.random() * 0.9]);
+  return V;
+}
+function genBlob(n) {      /* точки на сфере: после аффинного преобразования лежат на эллипсоиде,
+                              поэтому каждая из них становится вершиной оболочки */
+  var V = [];
+  for (var i = 0; i < n; i++) {
+    var z = Math.random() * 2 - 1, t = Math.random() * 6.283, r = Math.sqrt(1 - z*z);
+    V.push([r * Math.cos(t), r * Math.sin(t), z]);
+  }
+  return V;
+}
+
+/* Выпуклая оболочка набора точек: наращиваем по одной точке, снося видимые грани
+   и застраивая горизонт. Рёбра между гранями с одинаковой нормалью не настоящие
+   (это диагонали плоской грани) и отбрасываются — иначе у куба нашлось бы 18 рёбер. */
+function hull3d(P) {
+  var n = P.length, e = 1e-9;
+  if (n < 4) return null;
+  var i0 = 0, i1 = -1, i2 = -1, i3 = -1, i;
+  for (i = 1; i < n; i++) if (len(sub(P[i], P[i0])) > 1e-6) { i1 = i; break; }
+  if (i1 < 0) return null;
+  for (i = 0; i < n; i++) {
+    if (i === i0 || i === i1) continue;
+    if (len(cross(sub(P[i1], P[i0]), sub(P[i], P[i0]))) > 1e-6) { i2 = i; break; }
+  }
+  if (i2 < 0) return null;
+  var nn = cross(sub(P[i1], P[i0]), sub(P[i2], P[i0]));
+  for (i = 0; i < n; i++) {
+    if (i === i0 || i === i1 || i === i2) continue;
+    if (Math.abs(dot(nn, sub(P[i], P[i0]))) > 1e-6) { i3 = i; break; }
+  }
+  if (i3 < 0) return null;
+  var inside = mul(add(add(P[i0], P[i1]), add(P[i2], P[i3])), 0.25);
+  function mkf(a, b, c) {
+    var m = cross(sub(P[b], P[a]), sub(P[c], P[a]));
+    if (dot(m, sub(inside, P[a])) > 0) { var t = b; b = c; c = t; m = mul(m, -1); }
+    return { a: a, b: b, c: c, n: norm(m) };
+  }
+  var faces = [mkf(i0,i1,i2), mkf(i0,i1,i3), mkf(i0,i2,i3), mkf(i1,i2,i3)];
+  var done = {}; done[i0] = done[i1] = done[i2] = done[i3] = 1;
+  for (var p = 0; p < n; p++) {
+    if (done[p]) continue;
+    var vis = [], keep = [];
+    faces.forEach(function (F) {
+      if (dot(F.n, sub(P[p], P[F.a])) > 1e-9) vis.push(F); else keep.push(F);
+    });
+    if (!vis.length) continue;
+    var cnt = {};
+    vis.forEach(function (F) {
+      [[F.a,F.b],[F.b,F.c],[F.c,F.a]].forEach(function (g) {
+        var k = Math.min(g[0],g[1]) + '_' + Math.max(g[0],g[1]);
+        cnt[k] = (cnt[k] || 0) + 1;
+      });
+    });
+    Object.keys(cnt).forEach(function (k) {
+      if (cnt[k] === 1) { var q = k.split('_'); keep.push(mkf(+q[0], +q[1], p)); }
+    });
+    faces = keep;
+    done[p] = 1;
+  }
+  var vset = {}, emap = {};
+  faces.forEach(function (F) {
+    vset[F.a] = 1; vset[F.b] = 1; vset[F.c] = 1;
+    [[F.a,F.b],[F.b,F.c],[F.c,F.a]].forEach(function (g) {
+      var k = Math.min(g[0],g[1]) + '_' + Math.max(g[0],g[1]);
+      (emap[k] || (emap[k] = [])).push(F.n);
+    });
+  });
+  var idx = Object.keys(vset).map(Number).sort(function (a, b) { return a - b; });
+  var map = {}; idx.forEach(function (v, j) { map[v] = j; });
+  var V = idx.map(function (v) { return P[v]; }), E = [];
+  Object.keys(emap).forEach(function (k) {
+    var ns = emap[k];
+    if (ns.length === 2 && dot(ns[0], ns[1]) > 1 - 1e-6) return;  /* грани плоские, ребра нет */
+    var q = k.split('_');
+    E.push([map[+q[0]], map[+q[1]]]);
+  });
+  if (!E.length) return null;
+  return { V: V, E: E };
+}
+
+/* min/max — вершины тела, sec — допустимое число вершин самого сечения:
+   выше девяти его уже не нарисовать щелчками, поэтому такие тела отбрасываются */
+var RUNG = [
+  { kind: 'cube', sec: [3, 6] },
+  { kind: 'para', sec: [3, 6] },
+  { kind: 'rand', min: 6,  max: 7,  sec: [4, 6] },
+  { kind: 'rand', min: 8,  max: 10, sec: [5, 8] },
+  { kind: 'rand', min: 12, max: 16, sec: [6, 9] }
+];
+
+function makeBody(rung) {
+  var cfg = RUNG[rung - 1], h;
+  if (cfg.kind === 'cube') { h = hull3d(normalizeBody(cubeV())); h.name = 'куб'; return h; }
+  if (cfg.kind === 'para') { h = hull3d(normalizeBody(affine(cubeV()))); h.name = 'параллелепипед'; return h; }
+  for (var t = 0; t < 300; t++) {
+    var pick = IT.rnd(4), V;
+    if (pick === 0) V = genPrism();
+    else if (pick === 1) V = genPyramid();
+    else if (pick === 2) V = genBipyramid();
+    else V = genBlob(cfg.min + IT.rnd(cfg.max - cfg.min + 1));
+    h = hull3d(normalizeBody(affine(V)));
+    if (!h || h.V.length < cfg.min || h.V.length > cfg.max || h.E.length < 6) continue;
+    h.name = 'случайное тело: ' + h.V.length + ' вершин, ' + h.E.length + ' рёбер';
+    return h;
+  }
+  return null;
+}
+
+/* ---------- векторы ---------- */
+function sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];}
+function mul(a,k){return [a[0]*k,a[1]*k,a[2]*k];}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function cross(a,b){return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];}
+function len(a){return Math.sqrt(dot(a,a));}
+function norm(a){var l=len(a);return [a[0]/l,a[1]/l,a[2]/l];}
+
+/* ---------- сечение ---------- */
+function sectionOf(body, P) {
+  var n = cross(sub(P[1], P[0]), sub(P[2], P[0]));
+  if (len(n) < 1e-9) return null;
+  n = norm(n);
+  var d = dot(n, P[0]), pts = [];
+  body.E.forEach(function (e) {
+    var A = body.V[e[0]], B = body.V[e[1]], den = dot(n, sub(B, A));
+    if (Math.abs(den) < 1e-12) return;
+    var t = (d - dot(n, A)) / den;
+    if (t < -1e-9 || t > 1 + 1e-9) return;
+    pts.push(add(A, mul(sub(B, A), t)));
+  });
+  var uniq = [];
+  pts.forEach(function (p) {
+    for (var i = 0; i < uniq.length; i++) if (len(sub(uniq[i], p)) < 1e-6) return;
+    uniq.push(p);
+  });
+  if (uniq.length < 3) return null;
+  var c = uniq.reduce(function (s, p) { return add(s, p); }, [0,0,0]);
+  c = mul(c, 1 / uniq.length);
+  var u = norm(sub(uniq[0], c)), v = cross(n, u);
+  uniq.sort(function (a, b) {
+    return Math.atan2(dot(v, sub(a,c)), dot(u, sub(a,c))) - Math.atan2(dot(v, sub(b,c)), dot(u, sub(b,c)));
+  });
+  return { pts: uniq, n: n, c: c, u: u, v: v };
+}
+
+function sides2d(pts) {
+  var s = [], per = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var j = (i + 1) % pts.length;
+    var dx = pts[j][0] - pts[i][0], dy = pts[j][1] - pts[i][1];
+    var l = Math.sqrt(dx*dx + dy*dy);
+    s.push(l); per += l;
+  }
+  return s.map(function (l) { return l / per; });
+}
+function shapeMatch(A, B, tol) {
+  if (A.length !== B.length) return false;
+  var a = sides2d(A), b0 = sides2d(B);
+  for (var rev = 0; rev < 2; rev++) {
+    var b = rev ? b0.slice().reverse() : b0;
+    for (var off = 0; off < b.length; off++) {
+      var ok = true;
+      for (var i = 0; i < a.length; i++) if (Math.abs(a[i] - b[(i + off) % b.length]) > tol) { ok = false; break; }
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- прогон ---------- */
+var rung, body, marks, sec, st = { ax: -0.45, ay: 0.6 };
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  var tries = 0, lim = RUNG[rung - 1].sec;
+  do {
+    body = makeBody(rung);
+    if (!body) { tries++; continue; }
+    var idx = IT.shuffle(body.E.map(function (_, i) { return i; })).slice(0, 3);
+    marks = idx.map(function (i) {
+      var e = body.E[i], t = 0.2 + Math.random() * 0.6;
+      return add(body.V[e[0]], mul(sub(body.V[e[1]], body.V[e[0]]), t));
+    });
+    sec = sectionOf(body, marks);
+    tries++;
+  } while ((!sec || sec.pts.length < lim[0] || sec.pts.length > lim[1]) && tries < 400);
+  document.getElementById('start').style.display = 'none';
+  view();
+};
+
+function drawBody(cv, showSec) {
+  var ctx = cv.getContext('2d'), W = cv.width, H = cv.height, sc = Math.min(W, H) / 3.4;
+  ctx.clearRect(0, 0, W, H);
+  function pr(p) { var q = IT.rotate(p, st.ax, st.ay); return [W/2 + q[0]*sc, H/2 - q[1]*sc, q[2]]; }
+  ctx.strokeStyle = '#5d6b80'; ctx.lineWidth = 1.4;
+  body.E.forEach(function (e) {
+    var a = pr(body.V[e[0]]), b = pr(body.V[e[1]]);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  });
+  if (showSec && sec) {
+    ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    sec.pts.forEach(function (p, i) { var q = pr(p); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = 'rgba(125,211,252,0.18)'; ctx.fill();
+  }
+  var names = ['А', 'Б', 'В'];
+  marks.forEach(function (p, i) {
+    var q = pr(p);
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath(); ctx.arc(q[0], q[1], 5, 0, 6.3); ctx.fill();
+    ctx.font = '13px sans-serif'; ctx.fillText(names[i], q[0] + 7, q[1] - 6);
+  });
+}
+
+function view() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Тело: ' + body.name + '. Секущая плоскость проходит через точки А, Б, В.</p>' +
+    '<div style="text-align:center"><canvas id="cv" width="460" height="400"></canvas></div>' +
+    '<p class="hint" style="text-align:center">Крутите мышью.</p>' +
+    '<div class="row">Сколько вершин у сечения: <input type="number" id="nv" min="3" max="20" style="width:90px">' +
+    '<button class="primary" id="nx">Дальше</button></div></div>';
+  var cv = document.getElementById('cv');
+  drawBody(cv, false);
+  IT.dragRotate(cv, st, function () { drawBody(cv, false); });
+  document.getElementById('nx').onclick = function () {
+    var nv = parseInt(document.getElementById('nv').value, 10);
+    if (!nv) return;
+    if (rung === 1) return grade(nv, null);
+    drawPhase(nv);
+  };
+}
+
+function drawPhase(nv) {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Нарисуйте сечение: щёлкайте по холсту, отмечая вершины подряд по контуру.</p>' +
+    '<div style="text-align:center"><canvas id="dr" width="460" height="400"></canvas></div>' +
+    '<div class="row"><button id="undo">Убрать последнюю точку</button><button class="primary" id="fin">Готово</button></div>' +
+    '<p class="hint">Масштаб и поворот значения не имеют. Число точек должно совпасть с вашим ответом о вершинах — ' + nv + '.</p></div>';
+  var cv = document.getElementById('dr'), ctx = cv.getContext('2d'), pts = [];
+  function redraw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 2;
+    if (pts.length) {
+      ctx.beginPath();
+      pts.forEach(function (p, i) { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+      if (pts.length > 2) ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = '#fbbf24';
+      pts.forEach(function (p) { ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, 6.3); ctx.fill(); });
+    }
+  }
+  cv.onclick = function (e) {
+    var r = cv.getBoundingClientRect();
+    pts.push([e.clientX - r.left, e.clientY - r.top]);
+    redraw();
+  };
+  document.getElementById('undo').onclick = function () { pts.pop(); redraw(); };
+  document.getElementById('fin').onclick = function () { grade(nv, pts); };
+}
+
+function grade(nv, pts) {
+  var real = sec.pts.length;
+  var countOk = nv === real;
+  var shapeOk = true, drawn = null;
+  if (pts) {
+    drawn = pts.map(function (p) { return [p[0], p[1]]; });
+    var flat = sec.pts.map(function (p) {
+      var q = sub(p, sec.c);
+      return [dot(sec.u, q), dot(sec.v, q)];
+    });
+    shapeOk = (drawn.length === real) && shapeMatch(drawn, flat, 0.07);
+  }
+  var ok = countOk && shapeOk;
+  var d = 'Вершин в сечении: ' + real + ', ваш ответ: ' + nv + '.';
+  if (pts) d += shapeOk ? ' Форма совпала.' : ' Форма не совпала.';
+  var h = IT.report(ID, rung, ok, 1, d);
+  h += '<div class="panel"><h3>Точное сечение</h3>' +
+    '<div style="text-align:center"><canvas id="cv3" width="460" height="400"></canvas></div>' +
+    '<p class="hint" style="text-align:center">Голубым — построенное сечение. Крутите мышью.</p></div>';
+  document.getElementById('stage').innerHTML = h;
+  var cv = document.getElementById('cv3');
+  drawBody(cv, true);
+  IT.dragRotate(cv, st, function () { drawBody(cv, true); });
+}
+});
+</script>
+</body>
+</html>

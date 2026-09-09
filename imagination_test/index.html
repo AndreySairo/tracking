@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Тест воображения — журнал</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Тест воображения</h1>
+  <div id="warn"></div>
+  <div class="score" id="score"></div>
+  <div id="store"></div>
+
+  <h2>Основной блок — 100 баллов</h2>
+  <table class="tbl" id="tbl"></table>
+
+  <h2>Смежный блок — отдельные 8 баллов</h2>
+  <table class="tbl" id="tbl2"></table>
+
+  <div class="row">
+    <button class="primary" id="fix">Зафиксировать прогон</button>
+    <button id="exp">Экспорт журнала</button>
+    <button id="imp">Импорт журнала</button>
+    <button class="danger" id="rst">Сброс всего</button>
+  </div>
+  <div id="runs"></div>
+
+  <h2>Шкала</h2>
+  <table class="tbl" id="scale"></table>
+
+  <h2>Правила прохождения</h2>
+  <div class="panel">
+    <ol class="rules">
+      <li>Тип задачи постоянен навсегда, экземпляр задачи случаен при каждом запуске. Запоминать нечего: измеряется способность, а не выученный ответ.</li>
+      <li>Ступень засчитывается только тремя успехами подряд на трёх новых экземплярах. Одиночный успех отсекается как везение — журнал считает серию сам.</li>
+      <li>Полный прогон — раз в 4 недели, в одно и то же время суток. Проверка начинается на одну ступень ниже взятой: это подтверждает, что прежний уровень не потерян.</li>
+      <li>При первой неудаче на ступени прохождение задачи прекращается, балл фиксируется по последней подтверждённой ступени.</li>
+      <li>Балл задачи = вес × (взятая ступень ÷ число ступеней) × множитель за погрешность, где множитель отличен от единицы только в бильярде. У кубика Рубика шкала своя, нелинейная: 1,5 / 3 / 5 / 8 / 12.</li>
+      <li>Смежный блок в 100 баллов не входит: он измеряет удержание символов, а не чёткость картинки, и учитывается отдельно, чтобы рост в счёте не маскировал отсутствие роста в видении.</li>
+    </ol>
+  </div>
+</div>
+
+<script src="assets/core.js"></script>
+<script>
+IT.ready(function () {
+function render() {
+  document.getElementById('warn').innerHTML = IT.warnBox();
+  document.getElementById('store').innerHTML = IT.storageNote();
+  var s = IT.load(), tot = IT.totals();
+
+  document.getElementById('score').innerHTML =
+    '<b>' + tot.core.toFixed(1) + '</b> из 100 &nbsp;·&nbsp; смежный блок: ' + tot.extra.toFixed(1) + ' из ' + IT.EXTRA.reduce(function (a2, T) { return a2 + T.w; }, 0) + '<br>' +
+    '<span class="dim">' + IT.verdict(Math.floor(tot.core)) + '</span>';
+
+  function rows(list, tblId) {
+    var h = '<tr><th>Группа</th><th>Задача</th><th class="num">Вес</th><th>Ступень</th><th>Серия</th><th class="num">Баллы</th></tr>';
+    list.forEach(function (T) {
+      var t = IT.get(T.id), next = Math.min(t.rung + 1, T.r.length);
+      var st = t.streak['r' + next] || 0;
+      h += '<tr>' +
+        '<td class="dim">' + T.g + '</td>' +
+        '<td><a href="' + T.p + '">' + T.n + '</a>' +
+          (T.auto ? '<span class="tag auto">в браузере</span>' : '<span class="tag man">вручную</span>') + '</td>' +
+        '<td class="num">' + T.w + '</td>' +
+        '<td>' + t.rung + ' / ' + T.r.length + ' <span class="dim">' + (t.rung ? T.r[t.rung - 1] : '—') + '</span></td>' +
+        '<td>' + (t.rung >= T.r.length ? '<span class="ok">предел</span>' : st + '/3 на ступени ' + next) + '</td>' +
+        '<td class="num">' + IT.points(T, t).toFixed(2) + '</td>' +
+        '</tr>';
+    });
+    document.getElementById(tblId).innerHTML = h;
+  }
+  rows(IT.TASKS, 'tbl');
+  rows(IT.EXTRA, 'tbl2');
+
+  var sc = '<tr><th>Баллы</th><th>Толкование</th></tr>';
+  IT.SCALE.forEach(function (r) {
+    sc += '<tr><td>' + (r[0] === r[1] ? r[0] : r[0] + '–' + r[1]) + '</td><td>' + r[2] + '</td></tr>';
+  });
+  document.getElementById('scale').innerHTML = sc;
+
+  var rh = '';
+  if (s.runs && s.runs.length) {
+    rh = '<h3>Зафиксированные прогоны</h3><table class="tbl"><tr><th>Дата</th><th class="num">Основной блок</th><th class="num">Смежный</th><th class="num">Прирост</th></tr>';
+    s.runs.forEach(function (r, i) {
+      var prev = i > 0 ? s.runs[i - 1].core : null;
+      var d = prev === null ? '—' : (r.core - prev >= 0 ? '+' : '') + (r.core - prev).toFixed(1);
+      rh += '<tr><td>' + r.date + '</td><td class="num">' + r.core.toFixed(1) + '</td><td class="num">' + r.extra.toFixed(1) + '</td><td class="num">' + d + '</td></tr>';
+    });
+    rh += '</table>';
+  }
+  document.getElementById('runs').innerHTML = rh;
+}
+
+document.getElementById('fix').onclick = function () {
+  var s = IT.load(), tot = IT.totals();
+  s.runs = s.runs || [];
+  s.runs.push({ date: new Date().toISOString().slice(0, 10), core: tot.core, extra: tot.extra });
+  IT.save(s);
+  render();
+};
+
+document.getElementById('exp').onclick = function () {
+  var txt = JSON.stringify(IT.load());
+  var w = window.open('', '_blank');
+  if (w) { w.document.write('<pre style="white-space:pre-wrap;word-break:break-all">' + txt.replace(/</g, '&lt;') + '</pre>'); }
+  else { prompt('Скопируйте журнал:', txt); }
+};
+
+document.getElementById('imp').onclick = function () {
+  var txt = prompt('Вставьте ранее выгруженный журнал:');
+  if (!txt) return;
+  try { var o = JSON.parse(txt); if (!o.tasks) throw 0; IT.save(o); render(); }
+  catch (e) { alert('Не разобрано.'); }
+};
+
+document.getElementById('rst').onclick = function () {
+  if (confirm('Стереть весь журнал? Отменить нельзя.')) { IT.save(IT.blank()); render(); }
+};
+
+render();
+});
+</script>
+</body>
+</html>

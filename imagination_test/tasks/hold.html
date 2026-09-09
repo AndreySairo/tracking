@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Удержание образа</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="hd"></div>
+  <div id="warn"></div>
+
+  <div class="panel" id="start">
+    <p>Поле показывается 15 секунд (отсчёт можно прервать кнопкой «Запомнил, дальше»), затем оно исчезает и начинается пауза в 15 секунд. Всё это время образ надо удерживать целиком, ничем не занимаясь и ничего не записывая. После паузы задаётся десять вопросов по координатам.</p>
+    <p class="hint">Пауза одинакова на всех ступенях, растёт поле: чем оно больше, тем труднее удержать его целиком, не теряя клеток. Паузу прервать нельзя — она и есть проверка на распад образа.</p>
+    <div class="row"><span id="sel"></span><button class="primary" id="go">Начать</button></div>
+  </div>
+
+  <div id="stage"></div>
+</div>
+
+<script src="../assets/core.js"></script>
+<script>
+IT.ready(function () {
+var ID = 'hold', SIZE = [5, 6, 7, 8, 10], PAUSE = 15;
+document.getElementById('hd').innerHTML = IT.header(ID);
+document.getElementById('warn').innerHTML = IT.warnBox();
+document.getElementById('sel').innerHTML = IT.rungSelect(ID, 'rung');
+
+var N, F, rung, qs, qi, res;
+
+document.getElementById('go').onclick = function () {
+  rung = parseInt(document.getElementById('rung').value, 10);
+  N = SIZE[rung - 1];
+  var total = N * N, fill = Math.round(total * 0.4);
+  var idx = []; for (var i = 0; i < total; i++) idx.push(i);
+  IT.shuffle(idx);
+  F = new Array(total).fill(false);
+  for (var k = 0; k < fill; k++) F[idx[k]] = true;
+  document.getElementById('start').style.display = 'none';
+  show();
+};
+
+function gridHtml(cls) {
+  var h = '<div class="grid" style="grid-template-columns:repeat(' + N + ',auto)">';
+  for (var i = 0; i < N * N; i++) h += '<div class="cell ' + (cls || '') + (F[i] ? ' on' : '') + '"></div>';
+  return h + '</div>';
+}
+
+function show() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><div class="timer" id="tm"></div><div style="text-align:center">' + gridHtml() + '</div>' +
+    '<div class="row" style="justify-content:center"><button class="primary" id="skip">Запомнил, дальше</button></div></div>';
+  var skip = IT.phase(document.getElementById('tm'), 15, pause);
+  document.getElementById('skip').onclick = skip;
+}
+
+function pause() {
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="q">Удерживайте образ. Не записывайте, не проговаривайте вслух.</p><div class="timer" id="tm2"></div></div>';
+  IT.countdown(document.getElementById('tm2'), PAUSE, quiz);
+}
+
+function quiz() {
+  var idx = []; for (var i = 0; i < N * N; i++) idx.push(i);
+  IT.shuffle(idx);
+  qs = idx.slice(0, 10); qi = 0; res = [];
+  ask();
+}
+
+function ask() {
+  if (qi >= qs.length) return grade();
+  var c = qs[qi], r = Math.floor(c / N), col = c % N;
+  document.getElementById('stage').innerHTML =
+    '<div class="panel"><p class="dim">Вопрос ' + (qi + 1) + ' из 10</p>' +
+    '<p class="q">Строка ' + (r + 1) + ', столбец ' + (col + 1) + ' — была закрашена?</p>' +
+    '<div class="row"><button class="primary" id="yes">Да</button><button id="no">Нет</button></div></div>';
+  document.getElementById('yes').onclick = function () { res.push(true); qi++; ask(); };
+  document.getElementById('no').onclick = function () { res.push(false); qi++; ask(); };
+}
+
+function grade() {
+  var bad = 0;
+  for (var i = 0; i < qs.length; i++) if (res[i] !== F[qs[i]]) bad++;
+  var ok = bad === 0;
+  var h = IT.report(ID, rung, ok, 1, ok ? 'Образ дожил до конца паузы без искажений.' : 'Ошибок: ' + bad + ' из 10.');
+  h += '<div class="panel"><h3>Поле</h3><div style="text-align:center">' + gridHtml('small') + '</div></div>';
+  document.getElementById('stage').innerHTML = h;
+}
+});
+</script>
+</body>
+</html>
